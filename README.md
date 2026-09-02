@@ -16,7 +16,7 @@
 
 ## Cookie 获取
 
-登录 GLaDOS 后，在浏览器中按F12在开发者工具中打开 **Application / 应用** → **Cookies** → `https://glados-facility.com`，分别复制：
+在 https://glados-facility.com/console/checkin 地址登录 GLaDOS 后，在浏览器中按F12在开发者工具中打开 **Application / 应用** → **Cookies** → `https://glados-facility.com`，分别复制：
 
 - `koa:sess` 的值
 - `koa:sess.sig` 的值

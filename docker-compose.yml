@@ -1,0 +1,13 @@
+services:
+  glados-checkin:
+    build: .
+    container_name: glados-auto-checkin
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ./data:/app/data

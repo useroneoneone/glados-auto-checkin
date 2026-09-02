@@ -1,0 +1,159 @@
+# GLaDOS 多账号自动签到
+
+一个使用 Node.js、Playwright、SQLite 和 Docker 构建的 GLaDOS 自动签到管理控制台。
+
+## 功能
+
+- 管理多个 GLaDOS 账号，每个账号独立保存 Cookie、定时设置和 Webhook
+- 分别填写 `koa:sess` 与 `koa:sess.sig`，敏感字段加密存储
+- 检测 Cookie 登录状态，手动执行签到
+- 检测和签到使用后台异步任务，避免 Lucky、Nginx 等反向代理等待超时
+- 每个账号可在管理页面设置每日执行时间、时区和启用状态
+- 查看签到历史、积分、状态和错误信息
+- 支持 Webhook 测试以及企业微信、飞书、钉钉机器人格式
+- 通用 Webhook 可使用 HMAC-SHA256 签名
+- SQLite 数据持久化，重建 Docker 容器不会丢失账号和历史记录
+
+## Cookie 获取
+
+登录 GLaDOS 后，在浏览器中按F12在开发者工具中打开 **Application / 应用** → **Cookies** → `https://glados-facility.com`，分别复制：
+
+- `koa:sess` 的值
+- `koa:sess.sig` 的值
+
+只填写 Cookie 的值，不要把 `koa:sess=`、`koa:sess.sig=` 或完整 Cookie 请求头一起粘贴进去。
+
+## 本地启动
+
+1. 创建配置文件：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+2. 修改 `.env` 中的管理员密码和密钥。可使用以下命令生成随机密钥：
+
+```powershell
+[Convert]::ToHexString((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+```
+
+3. 构建并启动：
+
+```powershell
+docker compose up -d --build
+```
+
+4. 打开 `http://127.0.0.1:3000`，使用 `.env` 中的 `ADMIN_USER` 和 `ADMIN_PASSWORD` 登录。
+
+查看状态和日志：
+
+```powershell
+docker ps --filter name=glados-auto-checkin
+docker logs --tail 100 glados-auto-checkin
+```
+
+停止服务：
+
+```powershell
+docker compose down
+```
+
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `PORT` | `3000` | Web 服务端口 |
+| `TZ` | `Asia/Shanghai` | 容器时区 |
+| `DATABASE_PATH` | `/app/data/glados.sqlite` | SQLite 数据库路径 |
+| `APP_SECRET` | 无安全默认值 | Cookie 和 Webhook Secret 加密密钥 |
+| `SESSION_SECRET` | 无安全默认值 | 管理后台 Session 密钥 |
+| `ADMIN_USER` | `admin` | 管理员账号 |
+| `ADMIN_PASSWORD` | `change-this-password` | 管理员密码 |
+| `GLADOS_ORIGIN` | `https://glados-facility.com` | GLaDOS 地址 |
+| `GLADOS_CHECKIN_TOKEN` | `glados.cloud` | GLaDOS 签到接口 Token |
+
+定时时间和时区不再由 `.env` 控制，而是在后台为每个账号单独设置。修改执行时间、时区或重新启用账号时，当天调度标记会自动重置。
+
+## Webhook
+
+账号编辑页面提供 Webhook 测试按钮。程序会根据 URL 自动选择消息格式：
+
+- 企业微信：`qyapi.weixin.qq.com/cgi-bin/webhook/send`
+- 飞书：`open.feishu.cn/open-apis/bot/...`
+- 钉钉：包含 `/robot/send` 的钉钉机器人地址
+- 其他地址：发送通用 JSON
+
+通用 Webhook 示例：
+
+```json
+{
+  "event": "glados.checkin",
+  "account": {
+    "id": 1,
+    "label": "主账号",
+    "email": "name@example.com",
+    "cookieExpiresAt": "2027-01-01T00:00:00.000Z"
+  },
+  "result": {
+    "status": "success",
+    "message": "签到成功",
+    "points": "1234",
+    "pointsChange": "1",
+    "checkedAt": "2026-09-02T07:15:00.000Z"
+  }
+}
+```
+
+配置 Webhook Secret 后，通用 Webhook 请求会携带：
+
+```text
+x-glados-signature: HMAC-SHA256(secret, raw_body)
+```
+
+如果平台返回非成功状态或业务错误码，错误会显示在账号状态、签到历史和容器日志中。
+
+## 异步任务
+
+点击“检测”或“签到”时，接口会立即创建后台任务，前端随后轮询任务状态。Playwright 在 Docker 容器中运行，对 GLaDOS 的请求从部署服务器发出，不是从访问管理页面的浏览器发出。
+
+因此使用 Lucky 或其他反向代理时，不需要让一个 HTTP 请求持续等待 Playwright 完成。只需确保普通 API 请求可以正常转发，并正确传递 `Host`、`X-Forwarded-For` 和 `X-Forwarded-Proto`。
+
+## 服务器部署
+
+将项目上传到服务器后执行：
+
+```bash
+cd /root/glados-auto-checkin
+cp .env.example .env
+# 修改 .env
+docker compose up -d --build
+docker logs --tail 100 glados-auto-checkin
+```
+
+数据保存在项目的 `data/` 目录中。升级代码前建议备份：
+
+```bash
+cp -a data "data-backup-$(date +%Y%m%d-%H%M%S)"
+```
+
+## 上传到 GitHub
+
+项目已通过 `.gitignore` 排除 `.env`、SQLite 数据、本地测试凭据、依赖和压缩包。首次发布可以执行：
+
+```powershell
+git init
+git add .
+git status
+git commit -m "Initial release"
+git branch -M main
+git remote add origin https://github.com/YOUR_GITHUB_NAME/YOUR_REPOSITORY.git
+git push -u origin main
+```
+
+推送前务必检查 `git status`，确认没有 `.env`、`data/`、`.local-*` 或包含 Cookie 的文件。
+
+## 升级说明
+
+- 旧版完整 Cookie 数据仍可继续使用，界面会显示“旧格式”。编辑账号并填写两个新 Cookie 字段后会切换到双 Cookie 格式。
+- 数据库字段在启动时自动迁移，不需要手工修改 SQLite。
+- Playwright 包版本必须与 Docker 基础镜像版本一致。本项目固定使用 Playwright `1.55.0`。

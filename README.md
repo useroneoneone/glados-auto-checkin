@@ -136,24 +136,7 @@ docker logs --tail 100 glados-auto-checkin
 cp -a data "data-backup-$(date +%Y%m%d-%H%M%S)"
 ```
 
-## 上传到 GitHub
-
-项目已通过 `.gitignore` 排除 `.env`、SQLite 数据、本地测试凭据、依赖和压缩包。首次发布可以执行：
-
-```powershell
-git init
-git add .
-git status
-git commit -m "Initial release"
-git branch -M main
-git remote add origin https://github.com/YOUR_GITHUB_NAME/YOUR_REPOSITORY.git
-git push -u origin main
-```
-
-推送前务必检查 `git status`，确认没有 `.env`、`data/`、`.local-*` 或包含 Cookie 的文件。
-
 ## 升级说明
 
-- 旧版完整 Cookie 数据仍可继续使用，界面会显示“旧格式”。编辑账号并填写两个新 Cookie 字段后会切换到双 Cookie 格式。
 - 数据库字段在启动时自动迁移，不需要手工修改 SQLite。
 - Playwright 包版本必须与 Docker 基础镜像版本一致。本项目固定使用 Playwright `1.55.0`。

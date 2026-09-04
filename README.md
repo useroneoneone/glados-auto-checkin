@@ -46,7 +46,8 @@ Edge 用户可以打开 `edge://extensions/`，开启开发人员模式并加载
 
 安装后，在同一个浏览器用户配置中登录 GLaDOS，再打开签到控制台。首次使用某个后台域名时，点击浏览器工具栏中的插件图标，选择“永久授权当前网站”。授权成功后打开“添加 Cookie”或“编辑 Cookie”，点击“一键读取浏览器 Cookie”。检查自动填入的账号名称、两个 Cookie 值和过期时间后再保存。
 
-<img width="1225" height="861" alt="image" src="https://github.com/user-attachments/assets/9299cc76-bed5-4a51-9663-ebb0b230b785" />
+<img width="1225" height="861" alt="5" src="https://github.com/user-attachments/assets/9afb1284-8c98-44e0-9ff5-9b9cc10d5c40" />
+
 
 
 以下本机控制台地址无需额外授权：

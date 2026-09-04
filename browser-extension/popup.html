@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GLaDOS Cookie Helper</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <main class="popup">
+    <header class="brand">
+      <img src="icons/icon-48.png" width="38" height="38" alt="" />
+      <div>
+        <strong>GLaDOS Cookie Helper</strong>
+        <span>后台网站授权</span>
+      </div>
+    </header>
+
+    <section class="site-panel">
+      <span class="label">当前网站</span>
+      <strong id="site-origin">正在读取...</strong>
+      <span id="site-status" class="status">检查授权状态</span>
+    </section>
+
+    <p id="message" class="message" aria-live="polite"></p>
+    <button id="authorize" class="button button-primary" type="button">永久授权当前网站</button>
+    <button id="reconnect" class="button button-primary hidden" type="button">重新连接当前页面</button>
+    <button id="revoke" class="button button-secondary hidden" type="button">取消当前网站授权</button>
+
+    <p class="note">授权只用于让当前管理后台与插件通信，不会自动授权其他网站。</p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

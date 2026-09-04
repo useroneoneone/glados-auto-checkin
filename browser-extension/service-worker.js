@@ -4,12 +4,32 @@ const CONSOLE_ORIGINS = new Set([
   'http://localhost:3000',
 ])
 
-function senderAllowed(sender) {
+function consoleOrigin(sender) {
   try {
-    return CONSOLE_ORIGINS.has(new URL(sender.url || sender.tab?.url || '').origin)
+    return new URL(sender.url || sender.tab?.url || '').origin
   } catch {
-    return false
+    return ''
   }
+}
+
+function permissionPattern(origin) {
+  return `${origin}/*`
+}
+
+function registeredScriptId(origin) {
+  let hash = 2166136261
+  for (const char of origin) {
+    hash ^= char.charCodeAt(0)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `glados_console_${(hash >>> 0).toString(16)}`
+}
+
+async function senderAllowed(sender) {
+  const origin = consoleOrigin(sender)
+  if (!origin || origin === GLADOS_ORIGIN) return false
+  if (CONSOLE_ORIGINS.has(origin)) return true
+  return chrome.permissions.contains({ origins: [permissionPattern(origin)] })
 }
 
 function decodeSession(value) {
@@ -95,12 +115,19 @@ async function readGladosSession() {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type !== 'READ_GLADOS_SESSION') return false
-  if (!senderAllowed(sender)) {
-    sendResponse({ ok: false, error: '当前页面无权读取 GLaDOS Cookie' })
-    return false
-  }
-  readGladosSession()
+  Promise.resolve()
+    .then(async () => {
+      if (!await senderAllowed(sender)) throw new Error('当前后台域名尚未获得插件授权')
+      return readGladosSession()
+    })
     .then((data) => sendResponse({ ok: true, data }))
     .catch((error) => sendResponse({ ok: false, error: error.message || '读取 GLaDOS Cookie 失败' }))
   return true
+})
+
+chrome.permissions.onRemoved.addListener((permissions) => {
+  const ids = (permissions.origins || [])
+    .filter((pattern) => pattern.endsWith('/*'))
+    .map((pattern) => registeredScriptId(pattern.slice(0, -2)))
+  if (ids.length) chrome.scripting.unregisterContentScripts({ ids }).catch(() => {})
 })

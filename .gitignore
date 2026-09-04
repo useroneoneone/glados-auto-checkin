@@ -4,5 +4,5 @@ node_modules/
 .local-*
 *.tar.gz
 *.zip
-!public/downloads/glados-cookie-helper-v1.0.1.zip
+!public/downloads/glados-cookie-helper-v1.1.0.zip
 npm-debug.log*

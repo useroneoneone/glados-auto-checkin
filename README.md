@@ -29,6 +29,7 @@
 由于 GLaDOS Cookie 属于另一个域名且可能带有 `HttpOnly`，管理页面需要配套浏览器扩展才能读取。
 
 Chrome 安装步骤：
+
 <img width="768" height="466" alt="image" src="https://github.com/user-attachments/assets/3a6146e2-980c-408e-b10b-adfbbcec1854" />
 
 1. 打开 `chrome://extensions/`
@@ -36,11 +37,17 @@ Chrome 安装步骤：
 3. 点击“加载已解压的扩展程序”
 4. 选择项目中的 `browser-extension` 文件夹
 
+<img width="783" height="483" alt="image" src="https://github.com/user-attachments/assets/37583528-cd50-4d7c-88a9-8345385afbc5" />
+
+
 Edge 用户可以打开 `edge://extensions/`，开启开发人员模式并加载同一个文件夹。
 
 也可以在签到控制台打开“添加 Cookie”或“编辑 Cookie”，点击“下载读取 Cookie 插件”获得插件压缩包。解压后按上面的步骤加载插件文件夹。
 
 安装后，在同一个浏览器用户配置中登录 GLaDOS，再打开签到控制台。首次使用某个后台域名时，点击浏览器工具栏中的插件图标，选择“永久授权当前网站”。授权成功后打开“添加 Cookie”或“编辑 Cookie”，点击“一键读取浏览器 Cookie”。检查自动填入的账号名称、两个 Cookie 值和过期时间后再保存。
+
+<img width="1225" height="861" alt="image" src="https://github.com/user-attachments/assets/9299cc76-bed5-4a51-9663-ebb0b230b785" />
+
 
 以下本机控制台地址无需额外授权：
 
@@ -49,7 +56,6 @@ Edge 用户可以打开 `edge://extensions/`，开启开发人员模式并加载
 
 更换后台域名时不再需要修改插件文件。打开新的后台网站，点击插件图标并永久授权当前网站即可。每个后台域名单独授权，权限会持续保留，直到主动取消。
 
-浏览器不允许普通网页静默安装本地扩展。开发阶段需加载 `browser-extension` 文件夹；如果以后发布到 Chrome Web Store 或 Microsoft Edge Add-ons，控制台可以链接到商店安装页，但用户仍需在浏览器确认安装。
 
 ## 本地启动
 

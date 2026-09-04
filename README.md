@@ -29,6 +29,7 @@
 由于 GLaDOS Cookie 属于另一个域名且可能带有 `HttpOnly`，管理页面需要配套浏览器扩展才能读取。
 
 Chrome 安装步骤：
+<img width="768" height="466" alt="image" src="https://github.com/user-attachments/assets/3a6146e2-980c-408e-b10b-adfbbcec1854" />
 
 1. 打开 `chrome://extensions/`
 2. 开启右上角“开发者模式”

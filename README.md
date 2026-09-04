@@ -1,11 +1,12 @@
 # GLaDOS 多账号自动签到
 
-一个使用 Node.js、Playwright、SQLite 和 Docker 构建的 GLaDOS 自动签到管理控制台。
+一个使用 Node.js、Playwright、SQLite 和 Docker 构建的 GLaDOS机场 自动签到管理控制台。
 
 ## 功能
 
 - 管理多个 GLaDOS 账号，每个账号独立保存 Cookie、定时设置和 Webhook
 - 分别填写 `koa:sess` 与 `koa:sess.sig`，敏感字段加密存储
+- 安装配套 Chrome/Edge 扩展后，可一键读取当前浏览器的 Cookie、账号名称和过期时间
 - 检测 Cookie 登录状态，手动执行签到
 - 检测和签到使用后台异步任务，避免 Lucky、Nginx 等反向代理等待超时
 - 每个账号可在管理页面设置每日执行时间、时区和启用状态
@@ -22,6 +23,32 @@
 - `koa:sess.sig` 的值
 
 只填写 Cookie 的值，不要把 `koa:sess=`、`koa:sess.sig=` 或完整 Cookie 请求头一起粘贴进去。
+
+## 一键读取浏览器 Cookie
+
+由于 GLaDOS Cookie 属于另一个域名且可能带有 `HttpOnly`，管理页面需要配套浏览器扩展才能读取。
+
+Chrome 安装步骤：
+
+1. 打开 `chrome://extensions/`
+2. 开启右上角“开发者模式”
+3. 点击“加载已解压的扩展程序”
+4. 选择项目中的 `browser-extension` 文件夹
+
+Edge 用户可以打开 `edge://extensions/`，开启开发人员模式并加载同一个文件夹。
+
+也可以在签到控制台打开“添加 Cookie”或“编辑 Cookie”，点击“下载读取 Cookie 插件”获得插件压缩包。解压后按上面的步骤加载插件文件夹。
+
+安装后，在同一个浏览器用户配置中登录 GLaDOS，刷新签到控制台，打开“添加 Cookie”或“编辑 Cookie”，点击“一键读取浏览器 Cookie”。检查自动填入的账号名称、两个 Cookie 值和过期时间后再保存。
+
+扩展默认只响应以下控制台地址：
+
+- `http://127.0.0.1:3000`
+- `http://localhost:3000`
+
+更换后台域名时，请同时修改 `browser-extension/manifest.json` 和 `browser-extension/service-worker.js` 中的允许地址，然后在扩展管理页面重新加载扩展。
+
+浏览器不允许普通网页静默安装本地扩展。开发阶段需加载 `browser-extension` 文件夹；如果以后发布到 Chrome Web Store 或 Microsoft Edge Add-ons，控制台可以链接到商店安装页，但用户仍需在浏览器确认安装。
 
 ## 本地启动
 

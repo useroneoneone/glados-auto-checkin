@@ -42,6 +42,30 @@ function toast(message) {
   setTimeout(() => node.remove(), 2800)
 }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+function readBrowserCookie() {
+  return new Promise((resolve, reject) => {
+    const requestId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+    const timeout = setTimeout(() => {
+      window.removeEventListener('message', receive)
+      reject(new Error('未检测到 GLaDOS Cookie Helper 扩展，请先安装扩展并刷新本页'))
+    }, 6000)
+    function receive(event) {
+      const message = event.data
+      if (event.source !== window || event.origin !== window.location.origin) return
+      if (!message || message.source !== 'glados-cookie-helper' || message.type !== 'GLADOS_COOKIE_IMPORT_RESPONSE' || message.requestId !== requestId) return
+      clearTimeout(timeout)
+      window.removeEventListener('message', receive)
+      if (!message.ok) reject(new Error(message.error || '读取浏览器 Cookie 失败'))
+      else resolve(message.data)
+    }
+    window.addEventListener('message', receive)
+    window.postMessage({
+      source: 'glados-checkin-console',
+      type: 'GLADOS_COOKIE_IMPORT_REQUEST',
+      requestId,
+    }, window.location.origin)
+  })
+}
 async function runJob(url, accountId, label) {
   if (state.jobs[accountId]) return
   state.jobs[accountId] = label
@@ -116,12 +140,36 @@ function historyTable(rows) {
 }
 function accountModal() {
   const item = state.editing || {}
-  return `<div class="modal"><section class="modal-card"><h2>${item.id ? '编辑 Cookie' : '添加 Cookie'}</h2><form id="account-form" class="form-grid"><div class="field"><label>显示名称</label><input name="label" value="${esc(item.label)}" required /></div><div class="field"><label>备注邮箱（可选）</label><input name="email" type="email" value="${esc(item.email)}" /></div><div class="field"><label>koa:sess</label><input name="sess" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 koa:sess 的值'}" ${item.id ? '' : 'required'} /></div><div class="field"><label>koa:sess.sig</label><input name="sessSig" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 koa:sess.sig 的值'}" ${item.id ? '' : 'required'} /></div><div class="field full"><label>Cookie 过期时间（可选）</label><input name="cookieExpiresAt" type="datetime-local" value="${esc(toLocalInput(item.cookieExpiresAt))}" /></div><div class="field"><label>每日签到时间</label><input name="scheduleTime" type="time" value="${esc(item.scheduleTime || '07:15')}" required /></div><div class="field"><label>签到时区</label><select name="scheduleTimezone"><option value="Asia/Shanghai" ${(item.scheduleTimezone || 'Asia/Shanghai') === 'Asia/Shanghai' ? 'selected' : ''}>Asia/Shanghai</option><option value="Asia/Hong_Kong" ${item.scheduleTimezone === 'Asia/Hong_Kong' ? 'selected' : ''}>Asia/Hong_Kong</option><option value="UTC" ${item.scheduleTimezone === 'UTC' ? 'selected' : ''}>UTC</option></select></div><div class="field full"><label>Webhook URL（可选）</label><div class="inline-field"><input name="webhookUrl" type="url" value="${esc(item.webhookUrl)}" placeholder="https://example.com/hooks/glados" /><button type="button" class="btn btn-ghost" data-test-webhook>测试</button></div></div><div class="field full"><label>Webhook Secret（可选）</label><input name="webhookSecret" type="password" placeholder="请求头 x-glados-signature；留空表示保持不变" /></div><div class="field full"><label class="check-label"><input name="enabled" type="checkbox" ${item.enabled === false ? '' : 'checked'} />启用此账号的每日定时签到</label></div><div class="actions full"><button type="button" class="btn btn-ghost" data-close>取消</button><button class="btn btn-primary">保存</button></div></form></section></div>`
+  return `<div class="modal"><section class="modal-card"><div class="modal-head"><h2>${item.id ? '编辑 Cookie' : '添加 Cookie'}</h2><div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.0.1.zip" download="glados-cookie-helper-v1.0.1.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载读取 Cookie 插件</a><button type="button" class="btn btn-import" data-import-browser-cookie title="从当前浏览器的 GLaDOS 登录状态读取 Cookie">一键读取浏览器 Cookie</button></div></div><form id="account-form" class="form-grid"><div class="field"><label>显示名称</label><input name="label" value="${esc(item.label)}" required /></div><div class="field"><label>备注邮箱（可选）</label><input name="email" type="email" value="${esc(item.email)}" /></div><div class="field"><label>koa:sess</label><input name="sess" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 koa:sess 的值'}" ${item.id ? '' : 'required'} /></div><div class="field"><label>koa:sess.sig</label><input name="sessSig" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 koa:sess.sig 的值'}" ${item.id ? '' : 'required'} /></div><div class="field full"><label>Cookie 过期时间（可选）</label><input name="cookieExpiresAt" type="datetime-local" value="${esc(toLocalInput(item.cookieExpiresAt))}" /></div><div class="field"><label>每日签到时间</label><input name="scheduleTime" type="time" value="${esc(item.scheduleTime || '07:15')}" required /></div><div class="field"><label>签到时区</label><select name="scheduleTimezone"><option value="Asia/Shanghai" ${(item.scheduleTimezone || 'Asia/Shanghai') === 'Asia/Shanghai' ? 'selected' : ''}>Asia/Shanghai</option><option value="Asia/Hong_Kong" ${item.scheduleTimezone === 'Asia/Hong_Kong' ? 'selected' : ''}>Asia/Hong_Kong</option><option value="UTC" ${item.scheduleTimezone === 'UTC' ? 'selected' : ''}>UTC</option></select></div><div class="field full"><label>Webhook URL（可选）</label><div class="inline-field"><input name="webhookUrl" type="url" value="${esc(item.webhookUrl)}" placeholder="https://example.com/hooks/glados" /><button type="button" class="btn btn-ghost" data-test-webhook>测试</button></div></div><div class="field full"><label>Webhook Secret（可选）</label><input name="webhookSecret" type="password" placeholder="请求头 x-glados-signature；留空表示保持不变" /></div><div class="field full"><label class="check-label"><input name="enabled" type="checkbox" ${item.enabled === false ? '' : 'checked'} />启用此账号的每日定时签到</label></div><div class="actions full"><button type="button" class="btn btn-ghost" data-close>取消</button><button class="btn btn-primary">保存</button></div></form></section></div>`
 }
 function bindActions() {
   document.querySelector('[data-add]')?.addEventListener('click', () => { state.modal = true; state.editing = null; renderShell() })
   document.querySelector('[data-refresh]')?.addEventListener('click', async () => { await loadData(); renderShell(); toast('已刷新') })
   document.querySelector('[data-close]')?.addEventListener('click', () => { state.modal = false; renderShell() })
+  document.querySelector('[data-download-extension]')?.addEventListener('click', () => {
+    toast('插件压缩包已开始下载，解压后请在浏览器扩展管理页加载该文件夹')
+  })
+  document.querySelector('[data-import-browser-cookie]')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget
+    const form = button.closest('.modal-card').querySelector('#account-form')
+    const originalText = button.textContent
+    button.disabled = true
+    button.textContent = '正在读取...'
+    try {
+      const data = await readBrowserCookie()
+      form.elements.sess.value = data.sess || ''
+      form.elements.sessSig.value = data.sessSig || ''
+      form.elements.label.value = data.username || data.email || form.elements.label.value
+      if (data.email) form.elements.email.value = data.email
+      if (data.cookieExpiresAt) form.elements.cookieExpiresAt.value = toLocalInput(data.cookieExpiresAt)
+      toast('已读取 GLaDOS 登录信息，请确认后保存')
+    } catch (error) {
+      toast(error.message)
+    } finally {
+      button.disabled = false
+      button.textContent = originalText
+    }
+  })
   document.querySelector('#account-form')?.addEventListener('submit', async (event) => {
     event.preventDefault()
     const payload = Object.fromEntries(new FormData(event.currentTarget))

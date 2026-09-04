@@ -1,8 +1,8 @@
-data/
 .env
 node_modules/
 .npm-cache/
 .local-*
 *.tar.gz
 *.zip
+!public/downloads/glados-cookie-helper-v1.0.1.zip
 npm-debug.log*

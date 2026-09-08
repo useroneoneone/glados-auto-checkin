@@ -30,13 +30,13 @@ button { cursor: pointer; }
 .topbar { height: 78px; padding: 0 34px; border-bottom: 1px solid var(--line); background: rgba(247,249,251,.9); display: flex; align-items: center; justify-content: space-between; }
 .topbar h1 { margin: 0; font-size: 22px; letter-spacing: -.04em; }
 .content { padding: 30px 34px 50px; max-width: 1400px; }
-.grid { display: grid; gap: 18px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
 .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .stat, .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
 .stat { padding: 20px; }
 .stat .label { color: var(--muted); font-size: 12px; }
 .stat .value { margin-top: 9px; font-size: 28px; font-weight: 800; letter-spacing: -.05em; }
-.panel { padding: 22px; }
+.panel { padding: 22px; min-width: 0; }
 .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; }
 .panel-head h2 { margin: 0; font-size: 16px; letter-spacing: -.02em; }
 .btn { border: 1px solid transparent; border-radius: 7px; padding: 10px 14px; font-weight: 700; font-size: 13px; transition: transform .18s, background .18s, border-color .18s; }
@@ -51,6 +51,7 @@ button { cursor: pointer; }
 .btn-ghost { color: var(--ink); border-color: var(--line); background: #fff; }
 .btn-danger { color: var(--rose); border-color: #f0ccd4; background: #fff7f8; }
 .table-wrap { overflow: auto; }
+.warning-summary { display: grid; gap: 6px; margin-top: 14px; color: var(--muted); overflow-wrap: anywhere; line-height: 1.5; }
 table { width: 100%; border-collapse: collapse; min-width: 760px; }
 th, td { text-align: left; padding: 14px 10px; border-bottom: 1px solid #edf0f3; white-space: nowrap; }
 th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
@@ -87,6 +88,11 @@ td small { display: block; max-width: 320px; margin-top: 4px; color: var(--muted
 .login-card p { color: var(--muted); font-size: 13px; margin: 0 0 24px; }
 .login-card .field { margin-bottom: 14px; }
 .notice { padding: 10px 12px; border-radius: 7px; background: #fff4d7; color: #8b6319; font-size: 12px; margin-bottom: 15px; }
-.toast { position: fixed; right: 24px; bottom: 24px; background: #182536; color: #fff; padding: 12px 14px; border-radius: 8px; font-size: 13px; z-index: 8; box-shadow: var(--shadow); }
+.toast { position: fixed; right: 24px; bottom: 24px; max-width: calc(100vw - 48px); overflow-wrap: anywhere; background: #182536; color: #fff; padding: 12px 14px; border-radius: 8px; font-size: 13px; z-index: 8; box-shadow: var(--shadow); }
 @media (max-width: 980px) { .shell { grid-template-columns: 1fr; } .sidebar { padding: 14px 18px; flex-direction: row; align-items: center; gap: 18px; } .sidebar-foot { display: none; } .nav { display: flex; } .nav button { padding: 8px 10px; } .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .topbar { padding: 0 18px; } .content { padding: 20px 18px 36px; } .stats { grid-template-columns: 1fr 1fr; gap: 10px; } .stat { padding: 14px; } .stat .value { font-size: 24px; } .panel { padding: 16px; } .form-grid { grid-template-columns: 1fr; } .field.full { grid-column: auto; } .inline-field { grid-template-columns: 1fr; } .modal-head { align-items: stretch; flex-direction: column; } .modal-tools { display: grid; grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .sidebar { flex-wrap: wrap; gap: 12px; }
+  .nav { width: 100%; }
+  .nav button { white-space: nowrap; }
+}

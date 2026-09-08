@@ -5,3 +5,8 @@ npm-debug.log
 data
 .git
 browser-extension
+.local-*
+*.tar.gz
+test
+.github
+docs

@@ -1,0 +1,95 @@
+name: Build and publish Docker image
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Prepare image name
+        id: image
+        shell: bash
+        run: |
+          echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "tag=sha-${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            NPM_REGISTRY=https://registry.npmjs.org
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run regression tests in image
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
+        run: |
+          docker run --rm --init \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/test,dst=/app/test,readonly" \
+            "$IMAGE" npm test
+
+      - name: Verify browser and UI flows
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
+        run: |
+          docker run --rm --init \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/test,dst=/app/test,readonly" \
+            "$IMAGE" node test/browser.smoke.js
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish tested image
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          TAG: ${{ steps.image.outputs.tag }}
+        shell: bash
+        run: |
+          docker push "$IMAGE:$TAG"
+          if [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
+            docker tag "$IMAGE:$TAG" "$IMAGE:latest"
+            docker push "$IMAGE:latest"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            docker tag "$IMAGE:$TAG" "$IMAGE:$GITHUB_REF_NAME"
+            docker push "$IMAGE:$GITHUB_REF_NAME"
+          fi
+          echo "Published \`$IMAGE:$TAG\` (linux/amd64)." >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,16 @@
+services:
+  glados-checkin:
+    image: ${GLADOS_IMAGE:-ghcr.io/useroneoneone/glados-auto-checkin:latest}
+    container_name: glados-auto-checkin
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+      DATABASE_PATH: /app/data/glados.sqlite
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - ./data:/app/data

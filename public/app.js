@@ -29,7 +29,7 @@ const badge = (status) => {
   return `<span class="badge ${cls}">${label}</span>`
 }
 async function api(url, options = {}) {
-  const response = await fetch(url, { headers: { 'content-type': 'application/json', ...(options.headers || {}) }, ...options })
+  const response = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { 'content-type': 'application/json', ...(options.headers || {}) }, ...options })
   const data = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(data.error || '请求失败')
   return data
@@ -42,6 +42,31 @@ function toast(message) {
   setTimeout(() => node.remove(), 2800)
 }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+function jobLabel(job) {
+  if (!job) return ''
+  if (job.status === 'queued') return '排队'
+  if (job.status === 'notifying') return '推送'
+  return job.type === 'login' ? '检测' : '签到'
+}
+
+async function waitJob(id, onProgress = () => {}) {
+  let errors = 0
+  while (state.user) {
+    await sleep(1500)
+    let job
+    try {
+      ;({ job } = await api(`/api/jobs/${id}`))
+      errors = 0
+    } catch (error) {
+      if (++errors >= 5) throw new Error(`任务状态查询中断，任务仍可能在后台执行，请刷新查看：${error.message}`)
+      continue
+    }
+    onProgress(job)
+    if (job.status === 'completed') return job.result
+    if (job.status === 'failed') throw new Error(job.error || '任务失败')
+  }
+  throw new Error('已退出登录，后台任务继续执行')
+}
 function readBrowserCookie() {
   return new Promise((resolve, reject) => {
     const requestId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
@@ -68,27 +93,27 @@ function readBrowserCookie() {
 }
 async function runJob(url, accountId, label) {
   if (state.jobs[accountId]) return
-  state.jobs[accountId] = label
+  state.jobs[accountId] = '排队'
   renderShell()
   try {
     const created = await api(url, { method: 'POST' })
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      await sleep(1500)
-      const { job } = await api(`/api/jobs/${created.job.id}`)
-      if (job.status === 'completed') {
-        delete state.jobs[accountId]
-        await loadData()
-        renderShell()
-        toast(job.result?.message || `${label}完成`)
-        return
+    const result = await waitJob(created.job.id, (job) => {
+      const nextLabel = jobLabel(job)
+      if (state.jobs[accountId] !== nextLabel) {
+        state.jobs[accountId] = nextLabel
+        if (!state.modal && state.user) renderShell()
       }
-      if (job.status === 'failed') throw new Error(job.error || `${label}失败`)
-    }
-    throw new Error(`${label}等待超时，后台任务可能仍在执行`)
+    })
+    delete state.jobs[accountId]
+    if (!state.user) return
+    await loadData()
+    if (!state.modal) renderShell()
+    toast(result?.webhookError ? `${result.message}；Webhook 推送失败：${result.webhookError}` : result?.message || `${label}完成`)
   } catch (error) {
     delete state.jobs[accountId]
+    if (!state.user) return
     await loadData().catch(() => {})
-    renderShell()
+    if (!state.modal) renderShell()
     toast(error.message)
   }
 }
@@ -124,12 +149,22 @@ function overview(success, active) {
 function accountsView() {
   return `<section class="panel"><div class="panel-head"><h2>多账号 Cookie 与独立 Webhook</h2><button class="btn btn-primary" data-add>添加 Cookie</button></div>${accountTable()}</section>`
 }
+function cookieWarningSummary(item) {
+  if (item.cookieWarningEnabled === false) return '到期预警已关闭'
+  if (!item.enabled) return '到期预警已暂停'
+  if (!item.cookieExpiresAt) return '到期预警：未设置过期时间'
+  if (!item.webhookUrl) return '到期预警：未设置 Webhook'
+  if (item.cookieWarningError) return `预警推送失败：${item.cookieWarningError}`
+  if (item.cookieWarningStatus === 'pending') return '到期提醒推送中'
+  if (item.cookieWarningSentAt) return `已提醒：${fmt(item.cookieWarningSentAt)}`
+  return `到期前 ${item.cookieWarningDays ?? 3} 天预警`
+}
 function accountTable() {
   if (!state.accounts.length) return '<div class="empty">还没有 Cookie 账号，先添加一个 GLaDOS Cookie 吧。</div>'
   return `<div class="table-wrap"><table><thead><tr><th>账号</th><th>Cookie</th><th>定时</th><th>状态</th><th>最近运行</th><th>操作</th></tr></thead><tbody>${state.accounts.map((item) => {
-    const running = state.jobs[item.id]
+    const running = state.jobs[item.id] || jobLabel(item.activeJob)
     return `<tr><td><strong>${esc(item.label)}</strong>${item.email ? `<br/><span class="mono">${esc(item.email)}</span>` : ''}</td><td>${item.hasCookieSess && item.hasCookieSessSig ? '<span class="badge badge-success">双 Cookie 已保存</span>' : item.hasCookie ? '<span class="badge badge-warn">旧格式</span>' : '<span class="badge badge-muted">未保存</span>'}<br/><small>${item.cookieExpiresAt ? `过期：${fmt(item.cookieExpiresAt)}` : '未设置过期时间'}</small></td><td>${item.enabled ? `<strong>${esc(item.scheduleTime)}</strong><br/><span class="mono">${esc(item.scheduleTimezone)}</span>` : '<span class="badge badge-muted">已关闭</span>'}</td><td>${running ? '<span class="badge badge-running">' + esc(running) + '中</span>' : badge(item.lastStatus)}<br/><small>${esc(item.lastMessage || '')}</small></td><td>${fmt(item.lastCheckedAt)}</td><td><button class="btn btn-ghost" data-login="${item.id}" ${running ? 'disabled' : ''}>检测</button> <button class="btn btn-primary" data-checkin="${item.id}" ${running ? 'disabled' : ''}>签到</button> <button class="btn btn-ghost" data-edit="${item.id}" ${running ? 'disabled' : ''}>编辑</button> <button class="btn btn-danger" data-delete="${item.id}" ${running ? 'disabled' : ''}>删除</button></td></tr>`
-  }).join('')}</tbody></table></div>`
+  }).join('')}</tbody></table></div><div class="warning-summary">${state.accounts.map((item) => `<small><strong>${esc(item.label)}</strong> · ${esc(cookieWarningSummary(item))}</small>`).join('')}</div>`
 }
 function historyView() {
   return `<section class="panel"><div class="panel-head"><h2>签到历史</h2><button class="btn btn-ghost" data-refresh>刷新</button></div>${historyTable(state.checkins)}</section>`
@@ -140,7 +175,31 @@ function historyTable(rows) {
 }
 function accountModal() {
   const item = state.editing || {}
-  return `<div class="modal"><section class="modal-card"><div class="modal-head"><h2>${item.id ? '编辑 Cookie' : '添加 Cookie'}</h2><div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.1.0.zip" download="glados-cookie-helper-v1.1.0.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载读取 Cookie 插件</a><button type="button" class="btn btn-import" data-import-browser-cookie title="从当前浏览器的 GLaDOS 登录状态读取 Cookie">一键读取浏览器 Cookie</button></div></div><form id="account-form" class="form-grid"><div class="field"><label>显示名称</label><input name="label" value="${esc(item.label)}" required /></div><div class="field"><label>备注邮箱（可选）</label><input name="email" type="email" value="${esc(item.email)}" /></div><div class="field"><label>koa:sess</label><input name="sess" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 koa:sess 的值'}" ${item.id ? '' : 'required'} /></div><div class="field"><label>koa:sess.sig</label><input name="sessSig" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 koa:sess.sig 的值'}" ${item.id ? '' : 'required'} /></div><div class="field full"><label>Cookie 过期时间（可选）</label><input name="cookieExpiresAt" type="datetime-local" value="${esc(toLocalInput(item.cookieExpiresAt))}" /></div><div class="field"><label>每日签到时间</label><input name="scheduleTime" type="time" value="${esc(item.scheduleTime || '07:15')}" required /></div><div class="field"><label>签到时区</label><select name="scheduleTimezone"><option value="Asia/Shanghai" ${(item.scheduleTimezone || 'Asia/Shanghai') === 'Asia/Shanghai' ? 'selected' : ''}>Asia/Shanghai</option><option value="Asia/Hong_Kong" ${item.scheduleTimezone === 'Asia/Hong_Kong' ? 'selected' : ''}>Asia/Hong_Kong</option><option value="UTC" ${item.scheduleTimezone === 'UTC' ? 'selected' : ''}>UTC</option></select></div><div class="field full"><label>Webhook URL（可选）</label><div class="inline-field"><input name="webhookUrl" type="url" value="${esc(item.webhookUrl)}" placeholder="https://example.com/hooks/glados" /><button type="button" class="btn btn-ghost" data-test-webhook>测试</button></div></div><div class="field full"><label>Webhook Secret（可选）</label><input name="webhookSecret" type="password" placeholder="请求头 x-glados-signature；留空表示保持不变" /></div><div class="field full"><label class="check-label"><input name="enabled" type="checkbox" ${item.enabled === false ? '' : 'checked'} />启用此账号的每日定时签到</label></div><div class="actions full"><button type="button" class="btn btn-ghost" data-close>取消</button><button class="btn btn-primary">保存</button></div></form></section></div>`
+  return `<div class="modal"><section class="modal-card">
+    <div class="modal-head"><h2>${item.id ? '编辑 Cookie' : '添加 Cookie'}</h2>
+      <div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.1.0.zip" download="glados-cookie-helper-v1.1.0.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载读取 Cookie 插件</a>
+      <button type="button" class="btn btn-import" data-import-browser-cookie title="从当前浏览器的 GLaDOS 登录状态读取 Cookie">一键读取浏览器 Cookie</button></div>
+    </div>
+    <form id="account-form" class="form-grid">
+      <div class="field"><label>显示名称</label><input name="label" value="${esc(item.label)}" required /></div>
+      <div class="field"><label>备注邮箱（可选）</label><input name="email" type="email" value="${esc(item.email)}" /></div>
+      <div class="field"><label>koa:sess</label><input name="sess" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 koa:sess 的值'}" ${item.id ? '' : 'required'} /></div>
+      <div class="field"><label>koa:sess.sig</label><input name="sessSig" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 koa:sess.sig 的值'}" ${item.id ? '' : 'required'} /></div>
+      <div class="field full"><label>Cookie 过期时间（可选）</label><input name="cookieExpiresAt" type="datetime-local" value="${esc(toLocalInput(item.cookieExpiresAt))}" /></div>
+      <div class="field"><label class="check-label"><input name="cookieWarningEnabled" type="checkbox" ${item.cookieWarningEnabled === false ? '' : 'checked'} />Cookie 到期预警</label></div>
+      <div class="field"><label>提前天数</label><input name="cookieWarningDays" type="number" min="1" max="30" step="1" value="${esc(item.cookieWarningDays ?? 3)}" required /></div>
+      <div class="field"><label>每日签到时间</label><input name="scheduleTime" type="time" value="${esc(item.scheduleTime || '07:15')}" required /></div>
+      <div class="field"><label>签到时区</label><select name="scheduleTimezone">
+        <option value="Asia/Shanghai" ${(item.scheduleTimezone || 'Asia/Shanghai') === 'Asia/Shanghai' ? 'selected' : ''}>Asia/Shanghai</option>
+        <option value="Asia/Hong_Kong" ${item.scheduleTimezone === 'Asia/Hong_Kong' ? 'selected' : ''}>Asia/Hong_Kong</option>
+        <option value="UTC" ${item.scheduleTimezone === 'UTC' ? 'selected' : ''}>UTC</option>
+      </select></div>
+      <div class="field full"><label>Webhook URL（可选）</label><div class="inline-field"><input name="webhookUrl" type="url" value="${esc(item.webhookUrl)}" placeholder="https://example.com/hooks/glados" /><button type="button" class="btn btn-ghost" data-test-webhook>测试</button></div></div>
+      <div class="field full"><label>Webhook Secret（可选）</label><input name="webhookSecret" type="password" placeholder="请求头 x-glados-signature；留空表示保持不变" /></div>
+      <div class="field full"><label class="check-label"><input name="enabled" type="checkbox" ${item.enabled === false ? '' : 'checked'} />启用此账号的每日定时签到</label></div>
+      <div class="actions full"><button type="button" class="btn btn-ghost" data-close>取消</button><button class="btn btn-primary">保存</button></div>
+    </form>
+  </section></div>`
 }
 function bindActions() {
   document.querySelector('[data-add]')?.addEventListener('click', () => { state.modal = true; state.editing = null; renderShell() })
@@ -174,6 +233,8 @@ function bindActions() {
     event.preventDefault()
     const payload = Object.fromEntries(new FormData(event.currentTarget))
     payload.enabled = event.currentTarget.elements.enabled.checked
+    payload.cookieWarningEnabled = event.currentTarget.elements.cookieWarningEnabled.checked
+    payload.cookieWarningDays = Number(payload.cookieWarningDays)
     try {
       const url = state.editing ? `/api/accounts/${state.editing.id}` : '/api/accounts'
       await api(url, { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(payload) })
@@ -186,17 +247,19 @@ function bindActions() {
     }
   })
   document.querySelector('[data-test-webhook]')?.addEventListener('click', async (event) => {
-    const form = event.currentTarget.closest('form')
+    const button = event.currentTarget
+    const form = button.closest('form')
     const payload = Object.fromEntries(new FormData(form))
     if (!payload.webhookUrl) return toast('请先填写 Webhook URL')
-    event.currentTarget.disabled = true
+    button.disabled = true
     try {
       const response = await api('/api/webhooks/test', { method: 'POST', body: JSON.stringify(payload) })
-      toast(`Webhook 测试成功（HTTP ${response.result.status}）`)
+      const result = await waitJob(response.job.id)
+      toast(`Webhook 测试成功（HTTP ${result.status}）`)
     } catch (error) {
       toast(`Webhook 测试失败：${error.message}`)
     } finally {
-      event.currentTarget.disabled = false
+      button.disabled = false
     }
   })
   document.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => { state.editing = state.accounts.find((x) => x.id === Number(b.dataset.edit)); state.modal = true; renderShell() }))
@@ -215,3 +278,13 @@ async function boot() {
   }
 }
 boot()
+let refreshing = false
+setInterval(async () => {
+  if (!state.user || state.modal || refreshing || document.hidden) return
+  refreshing = true
+  try {
+    await loadData()
+    if (state.user && !state.modal) renderShell()
+  } catch { /* transient polling failures should not interrupt editing or execution */ }
+  finally { refreshing = false }
+}, 5000)

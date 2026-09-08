@@ -1,13 +1,12 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { randomUUID } from 'node:crypto'
 import express from 'express'
 import session from 'express-session'
 import bcrypt from 'bcryptjs'
 import { config } from './config.js'
 import { db, accountPublic } from './db.js'
 import { encrypt } from './crypto.js'
-import { loginAccount, runAccount, startScheduler, testWebhook } from './automation.js'
+import { jobs, queueLogin, queueCheckin, queueWebhookTest, startScheduler } from './automation.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -55,28 +54,17 @@ const webhookUrl = (value) => {
   try { if (!['http:', 'https:'].includes(new URL(raw).protocol)) throw new Error() } catch { throw new Error('Webhook URL 必须是 http 或 https 地址') }
   return raw
 }
-
-const jobs = new Map()
-function startJob(type, accountId, operation) {
-  const id = randomUUID()
-  const job = { id, type, accountId, status: 'queued', createdAt: new Date().toISOString(), startedAt: null, finishedAt: null, result: null, error: null }
-  jobs.set(id, job)
-  setImmediate(async () => {
-    job.status = 'running'
-    job.startedAt = new Date().toISOString()
-    try {
-      job.result = await operation()
-      job.status = 'completed'
-    } catch (error) {
-      job.error = error.message
-      job.status = 'failed'
-    } finally {
-      job.finishedAt = new Date().toISOString()
-      setTimeout(() => jobs.delete(id), 30 * 60 * 1000).unref()
-    }
-  })
-  return job
+const warningDays = (value, fallback = 3) => {
+  const days = Number(value ?? fallback)
+  if (!Number.isInteger(days) || days < 1 || days > 30) throw new Error('预警提前天数必须是 1–30 的整数')
+  return days
 }
+const warningEnabled = (value, fallback = true) => {
+  if (value === undefined) return Boolean(fallback)
+  if (typeof value !== 'boolean') throw new Error('到期预警开关格式无效')
+  return value
+}
+
 const loginAttempts = new Map()
 const authRateLimit = (req, res, next) => {
   const key = req.ip || 'unknown'
@@ -99,7 +87,10 @@ app.post('/api/auth/login', authRateLimit, async (req, res) => {
 app.post('/api/auth/logout', (req, res) => req.session.destroy(() => res.json({ ok: true })))
 app.get('/api/auth/me', (req, res) => req.session.admin ? res.json({ user: req.session.admin }) : res.status(401).json({ error: '未登录' }))
 
-app.get('/api/accounts', requireAuth, (req, res) => res.json({ accounts: db.prepare('SELECT * FROM accounts ORDER BY id DESC').all().map(accountPublic) }))
+app.get('/api/accounts', requireAuth, (req, res) => res.json({
+  accounts: db.prepare('SELECT * FROM accounts ORDER BY id DESC').all()
+    .map((row) => ({ ...accountPublic(row), activeJob: jobs.forAccount(row.id) })),
+}))
 app.post('/api/accounts', requireAuth, (req, res) => {
   const body = req.body || {}
   if (!text(body.label) || !text(body.sess) || !text(body.sessSig)) return res.status(400).json({ error: '请填写显示名称、koa:sess 和 koa:sess.sig' })
@@ -107,19 +98,23 @@ app.post('/api/accounts', requireAuth, (req, res) => {
   let accountWebhookUrl = null
   let accountScheduleTime
   let accountScheduleTimezone
+  let cookieWarningDays
+  let cookieWarningEnabled
   try {
     cookieExpiresAt = dateOrNull(body.cookieExpiresAt)
     accountWebhookUrl = webhookUrl(body.webhookUrl)
     accountScheduleTime = scheduleTime(body.scheduleTime)
     accountScheduleTimezone = scheduleTimezone(body.scheduleTimezone)
+    cookieWarningDays = warningDays(body.cookieWarningDays)
+    cookieWarningEnabled = warningEnabled(body.cookieWarningEnabled)
   } catch (error) { return res.status(400).json({ error: error.message }) }
   const now = new Date().toISOString()
-  const result = db.prepare(`INSERT INTO accounts (label, email, imap_host, imap_port, imap_secure, imap_user, imap_password_enc, webhook_url, webhook_secret_enc, cookie_enc, cookie_sess_enc, cookie_sess_sig_enc, cookie_expires_at, schedule_time, schedule_timezone, enabled, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+  const result = db.prepare(`INSERT INTO accounts (label, email, imap_host, imap_port, imap_secure, imap_user, imap_password_enc, webhook_url, webhook_secret_enc, cookie_enc, cookie_sess_enc, cookie_sess_sig_enc, cookie_expires_at, schedule_time, schedule_timezone, enabled, cookie_warning_enabled, cookie_warning_days, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     text(body.label), text(body.email), '', 993, 1, '', '',
     accountWebhookUrl, text(body.webhookSecret) ? encrypt(body.webhookSecret) : null,
     null, encrypt(text(body.sess)), encrypt(text(body.sessSig)), cookieExpiresAt,
-    accountScheduleTime, accountScheduleTimezone, body.enabled === false ? 0 : 1, now, now,
+    accountScheduleTime, accountScheduleTimezone, body.enabled === false ? 0 : 1, cookieWarningEnabled ? 1 : 0, cookieWarningDays, now, now,
   )
   res.status(201).json({ account: accountPublic(getAccount(result.lastInsertRowid)) })
 })
@@ -131,23 +126,27 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
   let accountWebhookUrl = account.webhook_url
   let accountScheduleTime = account.schedule_time || '07:15'
   let accountScheduleTimezone = account.schedule_timezone || 'Asia/Shanghai'
+  let cookieWarningDays
+  let cookieWarningEnabled
   try {
     if (body.cookieExpiresAt !== undefined) cookieExpiresAt = dateOrNull(body.cookieExpiresAt)
     if (body.webhookUrl !== undefined) accountWebhookUrl = webhookUrl(body.webhookUrl)
     if (body.scheduleTime !== undefined) accountScheduleTime = scheduleTime(body.scheduleTime)
     if (body.scheduleTimezone !== undefined) accountScheduleTimezone = scheduleTimezone(body.scheduleTimezone)
+    cookieWarningDays = warningDays(body.cookieWarningDays, account.cookie_warning_days)
+    cookieWarningEnabled = warningEnabled(body.cookieWarningEnabled, account.cookie_warning_enabled)
   } catch (error) { return res.status(400).json({ error: error.message }) }
   const now = new Date().toISOString()
   const sessEnc = text(body.sess) ? encrypt(text(body.sess)) : account.cookie_sess_enc
   const sessSigEnc = text(body.sessSig) ? encrypt(text(body.sessSig)) : account.cookie_sess_sig_enc
   const secretEnc = body.webhookSecret === '' ? null : (text(body.webhookSecret) ? encrypt(body.webhookSecret) : account.webhook_secret_enc)
-  const enabled = body.enabled === false ? 0 : 1
+  const enabled = body.enabled === undefined ? account.enabled : body.enabled === false ? 0 : 1
   const scheduleChanged = accountScheduleTime !== account.schedule_time || accountScheduleTimezone !== account.schedule_timezone || enabled !== account.enabled
   const lastScheduledDate = scheduleChanged ? null : account.last_scheduled_date
-  db.prepare(`UPDATE accounts SET label=?, email=?, webhook_url=?, webhook_secret_enc=?, cookie_sess_enc=?, cookie_sess_sig_enc=?, cookie_expires_at=?, schedule_time=?, schedule_timezone=?, enabled=?, last_scheduled_date=?, updated_at=? WHERE id=?`).run(
+  db.prepare(`UPDATE accounts SET label=?, email=?, webhook_url=?, webhook_secret_enc=?, cookie_sess_enc=?, cookie_sess_sig_enc=?, cookie_expires_at=?, schedule_time=?, schedule_timezone=?, enabled=?, cookie_warning_enabled=?, cookie_warning_days=?, last_scheduled_date=?, updated_at=? WHERE id=?`).run(
     text(body.label, account.label), text(body.email, account.email), accountWebhookUrl, secretEnc,
     sessEnc, sessSigEnc, cookieExpiresAt, accountScheduleTime, accountScheduleTimezone,
-    enabled, lastScheduledDate, now, account.id,
+    enabled, cookieWarningEnabled ? 1 : 0, cookieWarningDays, lastScheduledDate, now, account.id,
   )
   res.json({ account: accountPublic(getAccount(account.id)) })
 })
@@ -158,13 +157,13 @@ app.delete('/api/accounts/:id', requireAuth, (req, res) => {
 app.post('/api/accounts/:id/login', requireAuth, (req, res) => {
   const accountId = Number(req.params.id)
   if (!getAccount(accountId)) return res.status(404).json({ error: '账号不存在' })
-  const job = startJob('login', accountId, () => loginAccount(accountId))
+  const job = queueLogin(accountId)
   res.status(202).json({ job: { id: job.id, status: job.status } })
 })
 app.post('/api/accounts/:id/checkin', requireAuth, (req, res) => {
   const accountId = Number(req.params.id)
   if (!getAccount(accountId)) return res.status(404).json({ error: '账号不存在' })
-  const job = startJob('checkin', accountId, () => runAccount(accountId))
+  const job = queueCheckin(accountId)
   res.status(202).json({ job: { id: job.id, status: job.status } })
 })
 app.get('/api/jobs/:id', requireAuth, (req, res) => {
@@ -172,12 +171,12 @@ app.get('/api/jobs/:id', requireAuth, (req, res) => {
   if (!job) return res.status(404).json({ error: '任务不存在或已过期' })
   res.json({ job })
 })
-app.post('/api/webhooks/test', requireAuth, async (req, res) => {
+app.post('/api/webhooks/test', requireAuth, (req, res) => {
   try {
     const url = webhookUrl(req.body?.webhookUrl)
     if (!url) return res.status(400).json({ error: '请填写 Webhook URL' })
-    const result = await testWebhook({ url, secret: text(req.body?.webhookSecret), label: text(req.body?.label, 'Webhook 测试') })
-    res.json({ result })
+    const job = queueWebhookTest({ url, secret: text(req.body?.webhookSecret), label: text(req.body?.label, 'Webhook 测试') })
+    res.status(202).json({ job: { id: job.id, status: job.status } })
   } catch (error) {
     res.status(502).json({ error: error.message })
   }

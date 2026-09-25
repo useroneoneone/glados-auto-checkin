@@ -1,4 +1,4 @@
-import { chromium, request } from 'playwright'
+import { request } from 'playwright'
 import { config } from './config.js'
 import { decrypt } from './crypto.js'
 import { httpError, withRetry } from './retry.js'
@@ -77,8 +77,8 @@ export class GladosClient {
   async open() {
     const options = {
       timeout: config.requestTimeoutMs,
-      extraHTTPHeaders: { Accept: 'application/json', Referer: CHECKIN_URL },
-      userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/140.0.7339.16 Safari/537.36',
+      extraHTTPHeaders: { Accept: 'application/json', Referer: CHECKIN_URL, Origin: config.gladosOrigin },
+      userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.16 Safari/537.36',
     }
     if (!this.account.cookie_enc && !this.account.cookie_sess_enc && this.account.storage_state_enc) {
       try { options.storageState = JSON.parse(decrypt(this.account.storage_state_enc)) } catch { /* stale state */ }
@@ -93,21 +93,6 @@ export class GladosClient {
       options.storageState = { cookies, origins: [] }
     }
     this.api = await request.newContext(options)
-  }
-
-  async openPage() {
-    if (this.page) return
-    this.browser = await chromium.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    })
-    this.context = await this.browser.newContext({ storageState: await this.api.storageState() })
-    this.context.setDefaultTimeout(config.requestTimeoutMs)
-    await this.context.route('**/*', (route) => (
-      ['image', 'media', 'font'].includes(route.request().resourceType()) ? route.abort() : route.continue()
-    ))
-    this.page = await this.context.newPage()
-    await this.page.goto(CHECKIN_URL, { waitUntil: 'domcontentloaded', timeout: 60000 })
   }
 
   async requestJson(path, { method = 'GET', data } = {}) {
@@ -142,30 +127,6 @@ export class GladosClient {
     return { loggedIn: Boolean(data?.email || data?.isLogin || data?.loggedIn || data?.user || data?.username), data }
   }
 
-  async loginWithOtp(code) {
-    await this.openPage()
-    const emailInput = this.page.locator('input[type="email"], input[name*="email" i], input[placeholder*="邮箱" i]').first()
-    if (await emailInput.count()) await emailInput.fill(this.account.email)
-    const codeInput = this.page.locator('input[name*="code" i], input[placeholder*="验证码" i], input[inputmode="numeric"]').first()
-    if (!(await codeInput.count())) throw new Error('找不到验证码输入框')
-    await codeInput.fill(code)
-    const loginButton = this.page.getByRole('button', { name: /登录|登陆|提交/i }).first()
-    if (await loginButton.count()) await loginButton.click()
-    else await codeInput.press('Enter')
-    await this.page.waitForTimeout(1500)
-    return this.status()
-  }
-
-  async requestOtp() {
-    await this.openPage()
-    const emailInput = this.page.locator('input[type="email"], input[name*="email" i], input[placeholder*="邮箱" i]').first()
-    if (!(await emailInput.count())) throw new Error('找不到邮箱输入框')
-    await emailInput.fill(this.account.email)
-    const sendButton = this.page.getByRole('button', { name: /验证码|发送|获取/i }).first()
-    if (!(await sendButton.count())) throw new Error('找不到发送验证码按钮')
-    await sendButton.click()
-  }
-
   async checkin() {
     const expiresAt = Date.parse(this.account.cookie_expires_at || '')
     if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) return { status: 'login_required', message: 'Cookie 已过期，请在后台更新' }
@@ -176,7 +137,6 @@ export class GladosClient {
       response = await this.requestJson('/api/user/checkin', {
         method: 'POST', data: { token: config.gladosCheckinToken },
       })
-      if ([404, 405].includes(response.status)) response = await this.checkinViaPage()
     } catch (error) {
       return {
         status: 'failed', outcomeUnknown: true,
@@ -189,8 +149,10 @@ export class GladosClient {
     const result = summarizeCheckin(payload)
     const state = result.already ? 'already_signed' : (result.success ? 'success' : 'failed')
     let points = {}
+    const returnedHistory = payload?.list || payload?.data?.list
+    const latest = Array.isArray(returnedHistory) ? returnedHistory[0] : null
     let pointsWarning = ''
-    if (state !== 'failed') {
+    if (state !== 'failed' && latest?.balance == null) {
       try {
         const response = await this.requestJson('/api/user/points')
         if (!response.ok) throw httpError('积分查询', response.status)
@@ -200,28 +162,15 @@ export class GladosClient {
       }
     }
     const history = points.history || []
-    const change = history[0]?.change ?? null
+    const change = state === 'success' ? (payload?.points ?? latest?.change ?? history[0]?.change ?? null) : null
     return {
       status: state,
       message: `${payload?.message || payload?.msg || payload?.data?.message || JSON.stringify(payload)}${pointsWarning}`,
-      points: formatDecimal(points.points),
+      points: formatDecimal(latest?.balance ?? points.points),
       pointsChange: formatDecimal(change),
       leftDays: status.data?.leftDays == null ? null : String(status.data.leftDays).split('.')[0],
       raw: payload,
     }
-  }
-
-  async checkinViaPage() {
-    await this.openPage()
-    const pointsLink = this.page.getByText('积分', { exact: true }).first()
-    if (await pointsLink.count()) await pointsLink.click()
-    const [response] = await Promise.all([
-      this.page.waitForResponse((response) => (
-        new URL(response.url()).pathname === '/api/user/checkin' && response.request().method() === 'POST'
-      ), { timeout: config.requestTimeoutMs }),
-      this.page.getByText('签到', { exact: true }).first().click(),
-    ])
-    return { ok: response.ok(), status: response.status(), payload: await response.json() }
   }
 
   async close() {

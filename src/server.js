@@ -97,6 +97,7 @@ app.post('/api/accounts', requireAuth, (req, res) => {
   let cookieExpiresAt = null
   let accountWebhookUrl = null
   let accountScheduleTime
+  let accountScheduleEndTime
   let accountScheduleTimezone
   let cookieWarningDays
   let cookieWarningEnabled
@@ -104,17 +105,18 @@ app.post('/api/accounts', requireAuth, (req, res) => {
     cookieExpiresAt = dateOrNull(body.cookieExpiresAt)
     accountWebhookUrl = webhookUrl(body.webhookUrl)
     accountScheduleTime = scheduleTime(body.scheduleTime)
+    accountScheduleEndTime = scheduleTime(body.scheduleEndTime, accountScheduleTime)
     accountScheduleTimezone = scheduleTimezone(body.scheduleTimezone)
     cookieWarningDays = warningDays(body.cookieWarningDays)
     cookieWarningEnabled = warningEnabled(body.cookieWarningEnabled)
   } catch (error) { return res.status(400).json({ error: error.message }) }
   const now = new Date().toISOString()
-  const result = db.prepare(`INSERT INTO accounts (label, email, imap_host, imap_port, imap_secure, imap_user, imap_password_enc, webhook_url, webhook_secret_enc, cookie_enc, cookie_sess_enc, cookie_sess_sig_enc, cookie_expires_at, schedule_time, schedule_timezone, enabled, cookie_warning_enabled, cookie_warning_days, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+  const result = db.prepare(`INSERT INTO accounts (label, email, imap_host, imap_port, imap_secure, imap_user, imap_password_enc, webhook_url, webhook_secret_enc, cookie_enc, cookie_sess_enc, cookie_sess_sig_enc, cookie_expires_at, schedule_time, schedule_end_time, schedule_timezone, enabled, cookie_warning_enabled, cookie_warning_days, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     text(body.label), text(body.email), '', 993, 1, '', '',
     accountWebhookUrl, text(body.webhookSecret) ? encrypt(body.webhookSecret) : null,
     null, encrypt(text(body.sess)), encrypt(text(body.sessSig)), cookieExpiresAt,
-    accountScheduleTime, accountScheduleTimezone, body.enabled === false ? 0 : 1, cookieWarningEnabled ? 1 : 0, cookieWarningDays, now, now,
+    accountScheduleTime, accountScheduleEndTime, accountScheduleTimezone, body.enabled === false ? 0 : 1, cookieWarningEnabled ? 1 : 0, cookieWarningDays, now, now,
   )
   res.status(201).json({ account: accountPublic(getAccount(result.lastInsertRowid)) })
 })
@@ -125,6 +127,7 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
   let cookieExpiresAt = account.cookie_expires_at
   let accountWebhookUrl = account.webhook_url
   let accountScheduleTime = account.schedule_time || '07:15'
+  let accountScheduleEndTime = account.schedule_end_time
   let accountScheduleTimezone = account.schedule_timezone || 'Asia/Shanghai'
   let cookieWarningDays
   let cookieWarningEnabled
@@ -132,6 +135,7 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
     if (body.cookieExpiresAt !== undefined) cookieExpiresAt = dateOrNull(body.cookieExpiresAt)
     if (body.webhookUrl !== undefined) accountWebhookUrl = webhookUrl(body.webhookUrl)
     if (body.scheduleTime !== undefined) accountScheduleTime = scheduleTime(body.scheduleTime)
+    if (body.scheduleEndTime !== undefined) accountScheduleEndTime = scheduleTime(body.scheduleEndTime)
     if (body.scheduleTimezone !== undefined) accountScheduleTimezone = scheduleTimezone(body.scheduleTimezone)
     cookieWarningDays = warningDays(body.cookieWarningDays, account.cookie_warning_days)
     cookieWarningEnabled = warningEnabled(body.cookieWarningEnabled, account.cookie_warning_enabled)
@@ -141,12 +145,12 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
   const sessSigEnc = text(body.sessSig) ? encrypt(text(body.sessSig)) : account.cookie_sess_sig_enc
   const secretEnc = body.webhookSecret === '' ? null : (text(body.webhookSecret) ? encrypt(body.webhookSecret) : account.webhook_secret_enc)
   const enabled = body.enabled === undefined ? account.enabled : body.enabled === false ? 0 : 1
-  const scheduleChanged = accountScheduleTime !== account.schedule_time || accountScheduleTimezone !== account.schedule_timezone || enabled !== account.enabled
-  const lastScheduledDate = scheduleChanged ? null : account.last_scheduled_date
-  db.prepare(`UPDATE accounts SET label=?, email=?, webhook_url=?, webhook_secret_enc=?, cookie_sess_enc=?, cookie_sess_sig_enc=?, cookie_expires_at=?, schedule_time=?, schedule_timezone=?, enabled=?, cookie_warning_enabled=?, cookie_warning_days=?, last_scheduled_date=?, updated_at=? WHERE id=?`).run(
+  const scheduleChanged = accountScheduleEndTime !== account.schedule_end_time || accountScheduleTime !== account.schedule_time || accountScheduleTimezone !== account.schedule_timezone || enabled !== account.enabled
+  const lastScheduledDate = account.last_scheduled_date
+  db.prepare(`UPDATE accounts SET label=?, email=?, webhook_url=?, webhook_secret_enc=?, cookie_sess_enc=?, cookie_sess_sig_enc=?, cookie_expires_at=?, schedule_time=?, schedule_end_time=?, schedule_timezone=?, enabled=?, cookie_warning_enabled=?, cookie_warning_days=?, last_scheduled_date=?, schedule_plan_date=?, schedule_plan_minute=?, updated_at=? WHERE id=?`).run(
     text(body.label, account.label), text(body.email, account.email), accountWebhookUrl, secretEnc,
-    sessEnc, sessSigEnc, cookieExpiresAt, accountScheduleTime, accountScheduleTimezone,
-    enabled, cookieWarningEnabled ? 1 : 0, cookieWarningDays, lastScheduledDate, now, account.id,
+    sessEnc, sessSigEnc, cookieExpiresAt, accountScheduleTime, accountScheduleEndTime, accountScheduleTimezone,
+    enabled, cookieWarningEnabled ? 1 : 0, cookieWarningDays, lastScheduledDate, scheduleChanged ? null : account.schedule_plan_date, scheduleChanged ? null : account.schedule_plan_minute, now, account.id,
   )
   res.json({ account: accountPublic(getAccount(account.id)) })
 })

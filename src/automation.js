@@ -1,4 +1,5 @@
 import cron from 'node-cron'
+import { randomInt } from 'node:crypto'
 import { db } from './db.js'
 import { config } from './config.js'
 import { decrypt } from './crypto.js'
@@ -132,12 +133,32 @@ function scheduleParts(timezone, now) {
   return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` }
 }
 
-export function scheduleDueAccounts(now = new Date()) {
+export function scheduleDueAccounts(now = new Date(), chooseMinute = randomInt) {
   const scheduled = []
   for (const account of db.prepare('SELECT * FROM accounts WHERE enabled = 1').all()) {
     let current
     try { current = scheduleParts(account.schedule_timezone || 'Asia/Shanghai', now) } catch { continue }
-    if (current.time !== (account.schedule_time || '07:15')) continue
+    const minuteOf = (time) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3))
+    const start = minuteOf(account.schedule_time || '07:15')
+    let end = minuteOf(account.schedule_end_time || account.schedule_time || '07:15')
+    let minute = minuteOf(current.time)
+    // A window crossing midnight belongs to the date on which it starts.
+    if (end < start) {
+      if (minute <= end) {
+        current.date = new Date(Date.parse(`${current.date}T00:00:00Z`) - 86400000).toISOString().slice(0, 10)
+        minute += 1440
+      }
+      end += 1440
+    }
+    if (account.last_scheduled_date === current.date || minute > end) continue
+    let planned = account.schedule_plan_minute
+    if (account.schedule_plan_date !== current.date || planned == null) {
+      // First start inside the window draws only from the remaining minutes.
+      planned = chooseMinute(Math.max(start, minute), end + 1)
+      db.prepare('UPDATE accounts SET schedule_plan_date = ?, schedule_plan_minute = ? WHERE id = ?')
+        .run(current.date, planned, account.id)
+    }
+    if (minute < planned || minute < start) continue
     const claimed = db.prepare(`UPDATE accounts SET last_scheduled_date = ?
       WHERE id = ? AND (last_scheduled_date IS NULL OR last_scheduled_date <> ?)`).run(current.date, account.id, current.date)
     if (claimed.changes) scheduled.push(queueCheckin(account.id, 'scheduled'))
@@ -148,6 +169,7 @@ export function scheduleDueAccounts(now = new Date()) {
 export function startScheduler() {
   const scanWarnings = () => checkCookieWarnings().catch((error) => console.error(`Cookie warning scan failed: ${safeErrorMessage(error)}`))
   scanWarnings()
+  try { scheduleDueAccounts() } catch (error) { console.error(`Scheduler failed: ${safeErrorMessage(error)}`) }
   return cron.schedule('* * * * *', () => {
     try { scheduleDueAccounts() } catch (error) { console.error(`Scheduler failed: ${safeErrorMessage(error)}`) }
     scanWarnings()

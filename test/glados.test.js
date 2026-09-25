@@ -6,7 +6,12 @@ import { once } from 'node:events'
 let mode = 'normal'
 let counts = {}
 let receivedCookies = []
+let receivedBody = ''
 const server = http.createServer((req, res) => {
+  if (req.method === 'POST') {
+    receivedBody = ''
+    req.on('data', chunk => { receivedBody += chunk })
+  }
   const route = req.url.split('/').at(-1)
   counts[route] = (counts[route] || 0) + 1
   receivedCookies.push(req.headers.cookie || '')
@@ -25,11 +30,14 @@ const server = http.createServer((req, res) => {
     res.writeHead(503).end()
   } else if (route === 'checkin' && mode === 'uncertain-post') {
     req.socket.destroy()
+  } else if (route === 'checkin' && mode === 'missing-api') {
+    res.writeHead(404).end()
   } else {
     res.setHeader('content-type', 'application/json')
     res.end(JSON.stringify(
       route === 'status' ? { code: 0, data: { email: 'fixture@example.test', leftDays: '23.5' } }
         : route === 'points' ? { points: '8.0000000000000000', history: [{ change: '6.00000000' }] }
+          : mode === 'modern' ? { code: 0, points: 6, message: 'Checkin! Got 6 Points', streak: 16, list: [{ change: '6.00000000', balance: '196.0000000000000000' }] }
           : mode === 'already' ? { code: 1, message: 'Repeat! Already checked in' }
             : mode === 'business-failure' ? { code: 1, message: 'Checkin failed today' }
               : { code: 0, message: 'Checkin! Got 8 points' },
@@ -67,6 +75,21 @@ test('normal check-in uses isolated cookies, no browser, and normalized points',
   assert.equal(client.browser, null)
   assert.deepEqual(counts, { status: 1, checkin: 1, points: 1 })
   assert.ok(receivedCookies.every((cookie) => cookie.includes('koa:sess=fixture-session') && cookie.includes('koa:sess.sig=fixture-signature')))
+}))
+
+test('current API sends origin hostname token and reads returned ledger without extra requests', () => useClient('modern', async (client) => {
+  const result = await client.checkin()
+  assert.equal(JSON.parse(receivedBody).token, '127.0.0.1')
+  assert.equal(result.status, 'success')
+  assert.equal(result.points, '196')
+  assert.equal(result.pointsChange, '6')
+  assert.deepEqual(counts, { status: 1, checkin: 1 })
+}))
+
+test('missing API fails without launching a browser or replaying POST', () => useClient('missing-api', async (client) => {
+  await assert.rejects(client.checkin(), /404/)
+  assert.equal(counts.checkin, 1)
+  assert.equal(client.browser, null)
 }))
 
 test('transient status failures retry without repeating check-in', () => useClient('status-retry', async (client) => {

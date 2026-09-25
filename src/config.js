@@ -18,7 +18,10 @@ export const config = {
   checkinCron: process.env.CHECKIN_CRON || '15 7 * * *',
   checkinTimezone: process.env.CHECKIN_TIMEZONE || process.env.TZ || 'Asia/Shanghai',
   gladosOrigin: process.env.GLADOS_ORIGIN || 'https://glados-facility.com',
-  gladosCheckinToken: process.env.GLADOS_CHECKIN_TOKEN || 'glados.cloud',
+  // Migrate the old sample value too, since deployed .env files retain it.
+  gladosCheckinToken: !process.env.GLADOS_CHECKIN_TOKEN || process.env.GLADOS_CHECKIN_TOKEN === 'glados.cloud'
+    ? new URL(process.env.GLADOS_ORIGIN || 'https://glados-facility.com').hostname
+    : process.env.GLADOS_CHECKIN_TOKEN,
   checkinIntervalMs: integerSetting('CHECKIN_INTERVAL_MS', 1000, 0, 60000),
   requestTimeoutMs: integerSetting('GLADOS_REQUEST_TIMEOUT_MS', 30000, 100, 120000),
   requestAttempts: integerSetting('GLADOS_REQUEST_ATTEMPTS', 3, 1, 5),

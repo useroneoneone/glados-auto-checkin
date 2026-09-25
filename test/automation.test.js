@@ -77,6 +77,44 @@ test('simultaneous manual/scheduled runs serialize and deduplicate with one hist
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM checkins').get().n, 5)
 })
 
+test('random daily plan persists across scans and catches up only within the window', async () => {
+  addAccount(1)
+  db.prepare("UPDATE accounts SET schedule_time = '07:00', schedule_end_time = '09:00'").run()
+  assert.deepEqual(scheduleDueAccounts(new Date('2026-09-08T06:00:00Z'), (min, max) => {
+    assert.equal(min, 420); assert.equal(max, 541); return 480
+  }), [])
+  assert.equal(db.prepare('SELECT schedule_plan_minute FROM accounts').get().schedule_plan_minute, 480)
+  const noRedraw = () => assert.fail('persisted plan must not be redrawn')
+  assert.deepEqual(scheduleDueAccounts(new Date('2026-09-08T07:59:00Z'), noRedraw), [])
+  const due = scheduleDueAccounts(new Date('2026-09-08T08:12:00Z'), noRedraw)
+  assert.equal(due.length, 1)
+  await jobs.wait(due[0].id)
+  assert.deepEqual(scheduleDueAccounts(new Date('2026-09-08T08:13:00Z'), noRedraw), [])
+  assert.deepEqual(scheduleDueAccounts(new Date('2026-09-09T09:01:00Z'), noRedraw), [])
+  assert.deepEqual(scheduleDueAccounts(new Date('2026-09-10T08:30:00Z'), (min, max) => {
+    assert.equal(min, 510); assert.equal(max, 541); return 540
+  }), [])
+})
+
+test('overnight windows use the starting date and respect the configured timezone', async () => {
+  addAccount(1)
+  db.prepare("UPDATE accounts SET schedule_time = '23:00', schedule_end_time = '01:00', schedule_timezone = 'Asia/Shanghai'").run()
+  assert.deepEqual(scheduleDueAccounts(new Date('2026-09-08T14:00:00Z'), (min, max) => {
+    assert.equal(min, 1380); assert.equal(max, 1501); return 1470
+  }), [])
+  const due = scheduleDueAccounts(new Date('2026-09-08T16:30:00Z'), () => assert.fail('redraw'))
+  assert.equal(due.length, 1)
+  await jobs.wait(due[0].id)
+  assert.equal(db.prepare('SELECT last_scheduled_date FROM accounts').get().last_scheduled_date, '2026-09-08')
+  assert.deepEqual(scheduleDueAccounts(new Date('2026-09-08T17:00:00Z')), [])
+})
+
+test('disabled accounts never draw a random plan or enter the queue', () => {
+  addAccount(1)
+  db.prepare('UPDATE accounts SET enabled = 0').run()
+  assert.deepEqual(scheduleDueAccounts(new Date('2026-09-08T12:34:00Z'), () => assert.fail('disabled')), [])
+})
+
 test('slow webhook runs after cleanup and allows the next account to finish', async (t) => {
   addAccount(1, true)
   addAccount(2)

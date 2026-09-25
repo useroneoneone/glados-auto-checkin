@@ -90,6 +90,17 @@ test('authenticated HTTP jobs deduplicate and webhook tests return 202', { timeo
     assert.equal(settings.data.account.cookieWarningDays, 7)
     assert.equal(settings.data.account.cookieWarningEnabled, false)
     assert.equal(settings.data.account.enabled, false)
+    const window = await api(`/api/accounts/${ids[0]}`, {
+      method: 'PUT', body: { scheduleTime: '23:00', scheduleEndTime: '01:00', scheduleTimezone: 'UTC' },
+    })
+    assert.equal(window.response.status, 200)
+    assert.equal(window.data.account.scheduleTime, '23:00')
+    assert.equal(window.data.account.scheduleEndTime, '01:00')
+    const preserved = await api(`/api/accounts/${ids[0]}`, { method: 'PUT', body: { label: 'Updated' } })
+    assert.equal(preserved.data.account.scheduleEndTime, '01:00')
+    for (const invalid of ['24:00', '8:00', '', '00:60']) {
+      assert.equal((await api(`/api/accounts/${ids[0]}`, { method: 'PUT', body: { scheduleEndTime: invalid } })).response.status, 400)
+    }
     for (const invalid of [0, 31, 1.5, 'invalid', '']) {
       assert.equal((await api(`/api/accounts/${ids[0]}`, { method: 'PUT', body: { cookieWarningDays: invalid } })).response.status, 400)
     }

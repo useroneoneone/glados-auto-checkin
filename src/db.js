@@ -74,6 +74,10 @@ if (!accountColumns.includes('schedule_timezone')) db.prepare("ALTER TABLE accou
 if (!accountColumns.includes('last_scheduled_date')) db.prepare('ALTER TABLE accounts ADD COLUMN last_scheduled_date TEXT').run()
 if (!accountColumns.includes('cookie_warning_enabled')) db.prepare('ALTER TABLE accounts ADD COLUMN cookie_warning_enabled INTEGER NOT NULL DEFAULT 1').run()
 if (!accountColumns.includes('cookie_warning_days')) db.prepare('ALTER TABLE accounts ADD COLUMN cookie_warning_days INTEGER NOT NULL DEFAULT 3').run()
+for (const [name, type] of Object.entries({ schedule_end_time: 'TEXT', schedule_plan_date: 'TEXT', schedule_plan_minute: 'INTEGER' })) {
+  if (!accountColumns.includes(name)) db.exec(`ALTER TABLE accounts ADD COLUMN ${name} ${type}`)
+}
+
 db.prepare("UPDATE accounts SET last_message = '检测失败：网络连接中断' WHERE last_message LIKE '%cookie:%'").run()
 db.prepare("UPDATE checkins SET message = '执行失败：网络连接中断' WHERE message LIKE '%cookie:%'").run()
 
@@ -109,6 +113,9 @@ export function accountPublic(row) {
     cookieWarningSentAt: warning?.sent_at || null,
     cookieWarningError: warning?.last_error || null,
     scheduleTime: row.schedule_time || '07:15',
+    scheduleEndTime: row.schedule_end_time || row.schedule_time || '07:15',
+    scheduledDate: row.schedule_plan_date,
+    scheduledTime: row.schedule_plan_minute == null ? null : `${String(Math.floor(row.schedule_plan_minute / 60) % 24).padStart(2, '0')}:${String(row.schedule_plan_minute % 60).padStart(2, '0')}`,
     scheduleTimezone: row.schedule_timezone || 'Asia/Shanghai',
     enabled: Boolean(row.enabled),
     lastStatus: row.last_status,

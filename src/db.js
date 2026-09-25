@@ -69,6 +69,7 @@ if (!accountColumns.includes('cookie_enc')) db.prepare('ALTER TABLE accounts ADD
 if (!accountColumns.includes('cookie_expires_at')) db.prepare('ALTER TABLE accounts ADD COLUMN cookie_expires_at TEXT').run()
 if (!accountColumns.includes('cookie_sess_enc')) db.prepare('ALTER TABLE accounts ADD COLUMN cookie_sess_enc TEXT').run()
 if (!accountColumns.includes('cookie_sess_sig_enc')) db.prepare('ALTER TABLE accounts ADD COLUMN cookie_sess_sig_enc TEXT').run()
+if (!accountColumns.includes('cookie_namespace')) db.exec("ALTER TABLE accounts ADD COLUMN cookie_namespace TEXT NOT NULL DEFAULT 'koa'")
 if (!accountColumns.includes('schedule_time')) db.prepare("ALTER TABLE accounts ADD COLUMN schedule_time TEXT NOT NULL DEFAULT '07:15'").run()
 if (!accountColumns.includes('schedule_timezone')) db.prepare("ALTER TABLE accounts ADD COLUMN schedule_timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai'").run()
 if (!accountColumns.includes('last_scheduled_date')) db.prepare('ALTER TABLE accounts ADD COLUMN last_scheduled_date TEXT').run()
@@ -92,7 +93,7 @@ export function accountPublic(row) {
   const warning = row.cookie_expires_at ? db.prepare(`SELECT status, sent_at, last_error FROM cookie_warnings
     WHERE account_id = ? AND cookie_expires_at = ? ORDER BY id DESC LIMIT 1`).get(row.id, row.cookie_expires_at) : null
   const lastMessage = String(row.last_message || '')
-    .replace(/koa:sess(?:\.sig)?=[^;\s]+/gi, 'koa:sess=[已隐藏]')
+    .replace(/(?:koa|gld):sess(?:\.sig)?=[^;\s]+/gi, 'session=[已隐藏]')
     .split('\n').filter((line) => !/^\s*-\s*cookie:/i.test(line)).join('\n').slice(0, 500)
   return {
     id: row.id,
@@ -106,6 +107,7 @@ export function accountPublic(row) {
     hasCookie: Boolean((row.cookie_sess_enc && row.cookie_sess_sig_enc) || row.cookie_enc),
     hasCookieSess: Boolean(row.cookie_sess_enc),
     hasCookieSessSig: Boolean(row.cookie_sess_sig_enc),
+    cookieNamespace: row.cookie_namespace || 'koa',
     cookieExpiresAt: row.cookie_expires_at,
     cookieWarningEnabled: Boolean(row.cookie_warning_enabled),
     cookieWarningDays: row.cookie_warning_days,

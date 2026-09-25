@@ -24,6 +24,9 @@ const server = http.createServer((req, res) => {
     res.writeHead(401).end()
   } else if (route === 'status' && mode === 'forbidden') {
     res.writeHead(403).end()
+  } else if (route === 'status' && mode === 'business-unauthorized') {
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify({ code: -2, message: 'not logged in' }))
   } else if (route === 'status' && mode === 'html') {
     res.end('<html>challenge</html>')
   } else if (route === 'points' && mode === 'points-down') {
@@ -183,3 +186,22 @@ test('expired cookies skip requests entirely', async () => {
   assert.equal((await client.checkin()).status, 'login_required')
   assert.deepEqual(counts, {})
 })
+
+test('gld cookie namespace is sent unchanged and never relabeled as koa', async () => {
+  mode = 'modern'
+  counts = {}
+  receivedCookies = []
+  const client = new GladosClient({ ...account, cookie_namespace: 'gld' })
+  try {
+    await client.open()
+    assert.equal((await client.checkin()).status, 'success')
+    assert.ok(receivedCookies.every(value => value.includes('gld:sess=fixture-session') && value.includes('gld:sess.sig=fixture-signature') && !value.includes('koa:')))
+  } finally { await client.close() }
+})
+
+test('HTTP 200 with business code -2 explains session migration and skips POST', () => useClient('business-unauthorized', async (client) => {
+  const result = await client.checkin()
+  assert.equal(result.status, 'login_required')
+  assert.match(result.message, /gld:sess/)
+  assert.equal(counts.checkin, undefined)
+}))

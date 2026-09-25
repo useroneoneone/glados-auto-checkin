@@ -59,6 +59,7 @@ jobs:
         run: |
           docker run --rm --init \
             --mount "type=bind,src=$GITHUB_WORKSPACE/test,dst=/app/test,readonly" \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/browser-extension,dst=/app/browser-extension,readonly" \
             "$IMAGE" npm test
 
       - name: Verify browser and UI flows

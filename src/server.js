@@ -31,6 +31,11 @@ app.use((req, res, next) => {
 const requireAuth = (req, res, next) => req.session.admin ? next() : res.status(401).json({ error: '未登录' })
 const getAccount = (id) => db.prepare('SELECT * FROM accounts WHERE id = ?').get(Number(id))
 const text = (value, fallback = '') => String(value ?? fallback).trim()
+const cookieNamespace = (value, fallback = 'koa') => {
+  const prefix = text(value, fallback)
+  if (!['gld', 'koa'].includes(prefix)) throw new Error('Cookie 类型必须为 gld 或 koa')
+  return prefix
+}
 const dateOrNull = (value) => {
   const raw = text(value)
   if (!raw) return null
@@ -93,7 +98,8 @@ app.get('/api/accounts', requireAuth, (req, res) => res.json({
 }))
 app.post('/api/accounts', requireAuth, (req, res) => {
   const body = req.body || {}
-  if (!text(body.label) || !text(body.sess) || !text(body.sessSig)) return res.status(400).json({ error: '请填写显示名称、koa:sess 和 koa:sess.sig' })
+  if (!text(body.label) || !text(body.sess) || !text(body.sessSig)) return res.status(400).json({ error: '请填写显示名称和同一组会话 Cookie 的两项值' })
+  let accountCookieNamespace
   let cookieExpiresAt = null
   let accountWebhookUrl = null
   let accountScheduleTime
@@ -102,6 +108,7 @@ app.post('/api/accounts', requireAuth, (req, res) => {
   let cookieWarningDays
   let cookieWarningEnabled
   try {
+    accountCookieNamespace = cookieNamespace(body.cookieNamespace)
     cookieExpiresAt = dateOrNull(body.cookieExpiresAt)
     accountWebhookUrl = webhookUrl(body.webhookUrl)
     accountScheduleTime = scheduleTime(body.scheduleTime)
@@ -111,12 +118,12 @@ app.post('/api/accounts', requireAuth, (req, res) => {
     cookieWarningEnabled = warningEnabled(body.cookieWarningEnabled)
   } catch (error) { return res.status(400).json({ error: error.message }) }
   const now = new Date().toISOString()
-  const result = db.prepare(`INSERT INTO accounts (label, email, imap_host, imap_port, imap_secure, imap_user, imap_password_enc, webhook_url, webhook_secret_enc, cookie_enc, cookie_sess_enc, cookie_sess_sig_enc, cookie_expires_at, schedule_time, schedule_end_time, schedule_timezone, enabled, cookie_warning_enabled, cookie_warning_days, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+  const result = db.prepare(`INSERT INTO accounts (label, email, imap_host, imap_port, imap_secure, imap_user, imap_password_enc, webhook_url, webhook_secret_enc, cookie_enc, cookie_sess_enc, cookie_sess_sig_enc, cookie_expires_at, schedule_time, schedule_end_time, schedule_timezone, enabled, cookie_warning_enabled, cookie_warning_days, created_at, updated_at, cookie_namespace)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     text(body.label), text(body.email), '', 993, 1, '', '',
     accountWebhookUrl, text(body.webhookSecret) ? encrypt(body.webhookSecret) : null,
     null, encrypt(text(body.sess)), encrypt(text(body.sessSig)), cookieExpiresAt,
-    accountScheduleTime, accountScheduleEndTime, accountScheduleTimezone, body.enabled === false ? 0 : 1, cookieWarningEnabled ? 1 : 0, cookieWarningDays, now, now,
+    accountScheduleTime, accountScheduleEndTime, accountScheduleTimezone, body.enabled === false ? 0 : 1, cookieWarningEnabled ? 1 : 0, cookieWarningDays, now, now, accountCookieNamespace,
   )
   res.status(201).json({ account: accountPublic(getAccount(result.lastInsertRowid)) })
 })
@@ -124,6 +131,7 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
   const account = getAccount(req.params.id)
   if (!account) return res.status(404).json({ error: '账号不存在' })
   const body = req.body || {}
+  let accountCookieNamespace = account.cookie_namespace || 'koa'
   let cookieExpiresAt = account.cookie_expires_at
   let accountWebhookUrl = account.webhook_url
   let accountScheduleTime = account.schedule_time || '07:15'
@@ -132,6 +140,9 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
   let cookieWarningDays
   let cookieWarningEnabled
   try {
+    accountCookieNamespace = cookieNamespace(body.cookieNamespace, accountCookieNamespace)
+    if (accountCookieNamespace !== account.cookie_namespace && (!text(body.sess) || !text(body.sessSig))) throw new Error('切换 Cookie 类型时必须重新填写同一组会话的两项值')
+    if (Boolean(text(body.sess)) !== Boolean(text(body.sessSig))) throw new Error('请同时更新会话 Cookie 和签名，避免混用不同登录会话')
     if (body.cookieExpiresAt !== undefined) cookieExpiresAt = dateOrNull(body.cookieExpiresAt)
     if (body.webhookUrl !== undefined) accountWebhookUrl = webhookUrl(body.webhookUrl)
     if (body.scheduleTime !== undefined) accountScheduleTime = scheduleTime(body.scheduleTime)
@@ -147,10 +158,10 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
   const enabled = body.enabled === undefined ? account.enabled : body.enabled === false ? 0 : 1
   const scheduleChanged = accountScheduleEndTime !== account.schedule_end_time || accountScheduleTime !== account.schedule_time || accountScheduleTimezone !== account.schedule_timezone || enabled !== account.enabled
   const lastScheduledDate = account.last_scheduled_date
-  db.prepare(`UPDATE accounts SET label=?, email=?, webhook_url=?, webhook_secret_enc=?, cookie_sess_enc=?, cookie_sess_sig_enc=?, cookie_expires_at=?, schedule_time=?, schedule_end_time=?, schedule_timezone=?, enabled=?, cookie_warning_enabled=?, cookie_warning_days=?, last_scheduled_date=?, schedule_plan_date=?, schedule_plan_minute=?, updated_at=? WHERE id=?`).run(
+  db.prepare(`UPDATE accounts SET label=?, email=?, webhook_url=?, webhook_secret_enc=?, cookie_sess_enc=?, cookie_sess_sig_enc=?, cookie_expires_at=?, schedule_time=?, schedule_end_time=?, schedule_timezone=?, enabled=?, cookie_warning_enabled=?, cookie_warning_days=?, last_scheduled_date=?, schedule_plan_date=?, schedule_plan_minute=?, updated_at=?, cookie_namespace=? WHERE id=?`).run(
     text(body.label, account.label), text(body.email, account.email), accountWebhookUrl, secretEnc,
     sessEnc, sessSigEnc, cookieExpiresAt, accountScheduleTime, accountScheduleEndTime, accountScheduleTimezone,
-    enabled, cookieWarningEnabled ? 1 : 0, cookieWarningDays, lastScheduledDate, scheduleChanged ? null : account.schedule_plan_date, scheduleChanged ? null : account.schedule_plan_minute, now, account.id,
+    enabled, cookieWarningEnabled ? 1 : 0, cookieWarningDays, lastScheduledDate, scheduleChanged ? null : account.schedule_plan_date, scheduleChanged ? null : account.schedule_plan_minute, now, accountCookieNamespace, account.id,
   )
   res.json({ account: accountPublic(getAccount(account.id)) })
 })

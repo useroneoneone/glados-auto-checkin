@@ -90,7 +90,7 @@ docker compose -f docker-compose.prod.yml up -d
 运行时仅使用 Playwright 的 HTTP 请求客户端，不调用浏览器；现有 Docker 镜像中的浏览器仍供 CI 的后台页面冒烟测试使用。
 
 1. 在后台点击“添加 Cookie”。
-2. 填入 `koa:sess` 和 `koa:sess.sig` 的**值**，不要包含 Cookie 名称或整段请求头。
+2. 选择 `gld（当前站点）`，填入同一登录会话的 `gld:sess` 和 `gld:sess.sig` 的**值**，不要包含 Cookie 名称或整段请求头。
 3. 设置 Cookie 过期时间、每日签到时间、时区和该账号的 Webhook。
 4. 保存后可以点击“检测”或“签到”；Webhook 地址旁的“测试”按钮可单独验证推送。
 

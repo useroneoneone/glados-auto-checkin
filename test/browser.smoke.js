@@ -89,6 +89,7 @@ try {
   await page.locator('[name="cookieWarningDays"]').waitFor({ state: 'detached' })
   assert.equal(savedAccount.cookieWarningEnabled, false)
   assert.equal(savedAccount.cookieWarningDays, 7)
+  assert.equal(savedAccount.cookieNamespace, 'gld')
   assert.equal(savedAccount.scheduleTime, '07:00')
   assert.equal(savedAccount.scheduleEndTime, '09:00')
   await page.setViewportSize({ width: 390, height: 844 })

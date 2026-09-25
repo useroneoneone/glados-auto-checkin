@@ -92,19 +92,26 @@ async function statusFromOpenTab() {
 }
 
 async function readGladosSession() {
-  const [sess, sessSig] = await Promise.all([
+  const [modern, modernSig, legacy, legacySig] = await Promise.all([
+    chrome.cookies.get({ url: GLADOS_ORIGIN, name: 'gld:sess' }),
+    chrome.cookies.get({ url: GLADOS_ORIGIN, name: 'gld:sess.sig' }),
     chrome.cookies.get({ url: GLADOS_ORIGIN, name: 'koa:sess' }),
     chrome.cookies.get({ url: GLADOS_ORIGIN, name: 'koa:sess.sig' }),
   ])
-  if (!sess || !sessSig) throw new Error('当前浏览器没有找到完整的 GLaDOS 登录 Cookie，请先登录 GLaDOS')
+  // Never mix namespaces or fall back to stale koa cookies when gld is partial.
+  const cookieNamespace = modern || modernSig ? 'gld' : 'koa'
+  const [sess, sessSig] = cookieNamespace === 'gld' ? [modern, modernSig] : [legacy, legacySig]
+  if (!sess || !sessSig) throw new Error('当前浏览器没有找到完整的 GLaDOS 登录 Cookie，请重新登录 GLaDOS 后读取 gld:sess 和 gld:sess.sig')
 
   const sessionData = decodeSession(sess.value)
-  const expirySeconds = sess.expirationDate || sessSig.expirationDate
+  const expirations = [sess.expirationDate, sessSig.expirationDate].filter(value => Number.isFinite(value) && value > 0)
+  const expirySeconds = expirations.length ? Math.min(...expirations) : null
   const expiryMs = expirySeconds ? expirySeconds * 1000 : Number(sessionData._expire || 0)
   const status = await statusFromExtensionRequest() || await statusFromOpenTab() || {}
   const fallbackName = sessionData.userId ? `GLaDOS ${sessionData.userId}` : 'GLaDOS 账号'
 
   return {
+    cookieNamespace,
     sess: sess.value,
     sessSig: sessSig.value,
     username: status.username || status.email || fallbackName,

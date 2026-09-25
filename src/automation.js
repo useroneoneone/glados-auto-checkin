@@ -84,7 +84,7 @@ async function executeLogin(accountId) {
     if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) throw new Error('Cookie 已过期，请在后台更新')
     await client.open()
     const current = await client.status()
-    if (!current.loggedIn) throw new Error('Cookie 未登录或已失效')
+    if (!current.loggedIn) throw new Error(current.message || 'Cookie 未登录或已失效，请重新读取 Cookie')
     const now = new Date().toISOString()
     db.prepare('UPDATE accounts SET last_status = ?, last_message = ?, last_checked_at = ?, updated_at = ? WHERE id = ?')
       .run('logged_in', 'Cookie 登录态有效', now, now, accountId)

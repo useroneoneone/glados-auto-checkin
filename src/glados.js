@@ -51,6 +51,7 @@ function splitSessionCookies(account) {
   if (!account.cookie_sess_enc || !account.cookie_sess_sig_enc) return []
   const origin = new URL(config.gladosOrigin)
   const expiresAt = Date.parse(account.cookie_expires_at || '')
+  const prefix = account.cookie_namespace === 'gld' ? 'gld' : 'koa'
   const common = {
     domain: origin.hostname,
     path: '/',
@@ -60,8 +61,8 @@ function splitSessionCookies(account) {
     expires: Number.isFinite(expiresAt) ? Math.floor(expiresAt / 1000) : -1,
   }
   return [
-    { ...common, name: 'koa:sess', value: decrypt(account.cookie_sess_enc) },
-    { ...common, name: 'koa:sess.sig', value: decrypt(account.cookie_sess_sig_enc) },
+    { ...common, name: `${prefix}:sess`, value: decrypt(account.cookie_sess_enc) },
+    { ...common, name: `${prefix}:sess.sig`, value: decrypt(account.cookie_sess_sig_enc) },
   ].filter((cookie) => cookie.value)
 }
 
@@ -124,14 +125,16 @@ export class GladosClient {
     if (!response.ok) throw httpError('登录态检测', response.status)
     const json = response.payload
     const data = json?.data || json
-    return { loggedIn: Boolean(data?.email || data?.isLogin || data?.loggedIn || data?.user || data?.username), data }
+    const loggedIn = (json?.code == null || Number(json.code) === 0)
+      && Boolean(data?.email || data?.isLogin === true || data?.loggedIn === true || data?.user || data?.username)
+    return { loggedIn, data, message: loggedIn ? '' : '登录态无效，请用新版插件重新读取 gld:sess 和 gld:sess.sig；旧 koa Cookie 已不适用于当前站点' }
   }
 
   async checkin() {
     const expiresAt = Date.parse(this.account.cookie_expires_at || '')
     if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) return { status: 'login_required', message: 'Cookie 已过期，请在后台更新' }
     const status = await this.status()
-    if (!status.loggedIn) return { status: 'login_required', message: '登录状态已失效' }
+    if (!status.loggedIn) return { status: 'login_required', message: status.message || '登录状态已失效，请重新读取 Cookie' }
     let response
     try {
       response = await this.requestJson('/api/user/checkin', {

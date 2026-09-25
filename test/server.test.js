@@ -84,6 +84,12 @@ test('authenticated HTTP jobs deduplicate and webhook tests return 202', { timeo
       assert.equal(data.account.cookieWarningEnabled, true)
       ids.push(data.account.id)
     }
+    const browserAccount = await api('/api/accounts', {
+      method: 'POST', body: { label: 'Browser fixture', checkinMethod: 'browser', enabled: false },
+    })
+    assert.equal(browserAccount.response.status, 201)
+    assert.equal(browserAccount.data.account.checkinMethod, 'browser')
+    assert.equal(browserAccount.data.account.hasCookie, false)
     const settings = await api(`/api/accounts/${ids[0]}`, {
       method: 'PUT', body: { cookieWarningDays: 7, cookieWarningEnabled: false },
     })

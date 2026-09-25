@@ -7,9 +7,14 @@ import { safeErrorMessage } from './errors.js'
 const CHECKIN_URL = `${config.gladosOrigin}/console/checkin`
 const COOKIE_ATTRIBUTE_NAMES = new Set(['path', 'domain', 'expires', 'max-age', 'secure', 'httponly', 'samesite', 'priority'])
 
+function checkinMessage(payload) {
+  return String(payload?.message || payload?.msg || payload?.data?.message || '')
+    .replace(/&#(?:x20|32);|&nbsp;/gi, ' ').trim()
+}
+
 function summarizeCheckin(payload) {
-  const text = String(payload?.message || payload?.msg || payload?.data?.message || '')
-  const already = /repeat|already|已签|签到过/i.test(text)
+  const text = checkinMessage(payload)
+  const already = /repeat|already|已签|签到过|today['’]s observation logged/i.test(text)
   const success = payload?.code != null
     ? Number(payload.code) === 0
     : payload?.success === true || (!/fail|error|invalid|失败/i.test(text) && /checkin!|success|got|observation|签到成功/i.test(text))
@@ -149,6 +154,14 @@ export class GladosClient {
     if (response.status === 401) return { status: 'login_required', message: '登录状态已失效' }
     if (!response.ok) throw httpError('签到', response.status)
     const payload = response.payload
+    const message = checkinMessage(payload)
+    if (/automated check-in detected/i.test(message)) {
+      return {
+        status: 'login_required', reason: 'automated_checkin_detected',
+        message: `站点拒绝了自动签到，请在官网重新登录并更新 Cookie。登录检测通过不代表允许签到。此次未重复提交。站点提示：${message}`,
+        raw: payload,
+      }
+    }
     const result = summarizeCheckin(payload)
     const state = result.already ? 'already_signed' : (result.success ? 'success' : 'failed')
     let points = {}
@@ -168,7 +181,7 @@ export class GladosClient {
     const change = state === 'success' ? (payload?.points ?? latest?.change ?? history[0]?.change ?? null) : null
     return {
       status: state,
-      message: `${payload?.message || payload?.msg || payload?.data?.message || JSON.stringify(payload)}${pointsWarning}`,
+      message: `${message || JSON.stringify(payload)}${pointsWarning}`,
       points: formatDecimal(latest?.balance ?? points.points),
       pointsChange: formatDecimal(change),
       leftDays: status.data?.leftDays == null ? null : String(status.data.leftDays).split('.')[0],

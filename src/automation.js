@@ -4,12 +4,14 @@ import { db } from './db.js'
 import { config } from './config.js'
 import { decrypt } from './crypto.js'
 import { GladosClient } from './glados.js'
+import { BrowserCheckinManager } from './browser-checkin.js'
 import { JobRegistry } from './jobs.js'
 import { deliverWebhook } from './webhook.js'
 import { safeErrorMessage } from './errors.js'
 import { createCookieWarningScanner } from './cookie-warnings.js'
 
 export const checkCookieWarnings = createCookieWarningScanner({ database: db })
+export const browserCheckins = new BrowserCheckinManager()
 
 export const jobs = new JobRegistry({
   intervalMs: config.checkinIntervalMs,
@@ -28,13 +30,17 @@ async function executeCheckin(accountId) {
   let result
   let client
   try {
-    const expiresAt = Date.parse(account.cookie_expires_at || '')
-    if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
-      result = { status: 'login_required', message: 'Cookie 已过期，请在后台更新' }
+    if (account.checkin_method === 'browser') {
+      result = await browserCheckins.checkin(account)
     } else {
-      client = new GladosClient(account)
-      await client.open()
-      result = await client.checkin()
+      const expiresAt = Date.parse(account.cookie_expires_at || '')
+      if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+        result = { status: 'login_required', message: 'Cookie 已过期，请在后台更新' }
+      } else {
+        client = new GladosClient(account)
+        await client.open()
+        result = await client.checkin()
+      }
     }
   } catch (error) {
     result = { status: 'failed', message: safeErrorMessage(error) }
@@ -107,6 +113,12 @@ export function queueCheckin(accountId, source = 'manual') {
 
 export function queueLogin(accountId) {
   return jobs.enqueue({ type: 'login', accountId: Number(accountId) }, () => executeLogin(Number(accountId)))
+}
+
+export async function openBrowserLogin(accountId) {
+  const account = getAccount(Number(accountId))
+  if (account.checkin_method !== 'browser') throw new Error('请先将该账号的签到方式设为浏览器页面点击')
+  return browserCheckins.beginLogin(account)
 }
 
 export function runAccount(accountId) { return jobs.wait(queueCheckin(accountId).id) }

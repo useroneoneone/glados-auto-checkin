@@ -41,6 +41,8 @@ const server = http.createServer((req, res) => {
       route === 'status' ? { code: 0, data: { email: 'fixture@example.test', leftDays: '23.5' } }
         : route === 'points' ? { points: '8.0000000000000000', history: [{ change: '6.00000000' }] }
           : mode === 'modern' ? { code: 0, points: 6, message: 'Checkin! Got 6 Points', streak: 16, list: [{ change: '6.00000000', balance: '196.0000000000000000' }] }
+          : mode === 'automated' ? { code: 4, message: 'Automated check-in detected. Please sign in again to continue. &#x20;' }
+          : mode === 'observation-logged' ? { code: 1, points: 0, message: "Today's observation logged. Return tomorrow for more points." }
           : mode === 'already' ? { code: 1, message: 'Repeat! Already checked in' }
             : mode === 'business-failure' ? { code: 1, message: 'Checkin failed today' }
               : { code: 0, message: 'Checkin! Got 8 points' },
@@ -204,4 +206,21 @@ test('HTTP 200 with business code -2 explains session migration and skips POST',
   assert.equal(result.status, 'login_required')
   assert.match(result.message, /gld:sess/)
   assert.equal(counts.checkin, undefined)
+}))
+
+test('automated check-in rejection is distinct from expired authentication and never replayed', () => useClient('automated', async (client) => {
+  const result = await client.checkin()
+  assert.equal(result.status, 'login_required')
+  assert.equal(result.reason, 'automated_checkin_detected')
+  assert.match(result.message, /官网重新登录/)
+  assert.doesNotMatch(result.message, /&#x20;/)
+  assert.deepEqual(counts, { status: 1, checkin: 1 })
+  assert.equal(client.browser, null)
+}))
+
+test('current observation-logged response means already signed, not a new reward', () => useClient('observation-logged', async (client) => {
+  const result = await client.checkin()
+  assert.equal(result.status, 'already_signed')
+  assert.equal(result.pointsChange, null)
+  assert.equal(counts.checkin, 1)
 }))

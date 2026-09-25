@@ -51,7 +51,14 @@ app.post('/api/user/checkin', (req, res) => {
   res.json({ code: 0, message: 'Checkin! Got 8 points' })
 })
 app.get('/console/checkin', (req, res) => res.send(`<button onclick="fetch('/api/user/checkin',{method:'POST'})">签到</button>`))
-const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] })
+const executablePath = process.platform === 'win32'
+  ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+  : undefined
+const browser = await chromium.launch({
+  headless: true,
+  args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  ...(executablePath ? { executablePath } : {}),
+})
 const errors = []
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })

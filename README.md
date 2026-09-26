@@ -32,7 +32,7 @@ curl -fL https://raw.githubusercontent.com/useroneoneone/glados-auto-checkin/mai
 nano .env
 ```
 
-修改 `ADMIN_USER`、`ADMIN_PASSWORD`、`APP_SECRET`、`SESSION_SECRET`。后两个密钥分别使用 `openssl rand -hex 32` 生成，不要保留示例值。
+修改 `ADMIN_USER`、`ADMIN_PASSWORD`、`APP_SECRET`、`SESSION_SECRET`。后两个密钥分别使用 `openssl rand -hex 32` 生成，不要保留示例值, 未配置时分别会使用代码中的固定默认值：dev-only-change-me 和 dev-session-secret-change-me，但公网部署时这些值可预测。
 
 **后续更新保留 `.env`，尤其不要更换 `APP_SECRET`，否则旧 Cookie 无法解密。**
 
@@ -84,7 +84,7 @@ docker compose -f docker-compose.prod.yml up -d
 
 ## 轻量运行方式
 
-容器不再内置 Chromium、Xvfb、VNC 或 noVNC，也不暴露 6080 端口。签到请求从服务器的原生 HTTP 客户端发出，带有真实浏览器导入的完整 Cookie、来源页和常用浏览器请求头；每次只在随机时间窗内完成一次状态检查和一次签到提交。
+签到请求从服务器的原生 HTTP 客户端发出，带有真实浏览器导入的完整 Cookie、来源页和常用浏览器请求头；每次只在随机时间窗内完成一次状态检查和一次签到提交。
 
 新版插件以 `gld:sess`、`gld:sess.sig` 为必需登录态；若浏览器同时保存 `koa:sess`、`koa:sess.sig`，会将四项一并导入。服务端将导入内容加密后作为 Cookie 请求头发送。
 

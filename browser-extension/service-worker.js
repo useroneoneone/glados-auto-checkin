@@ -109,11 +109,20 @@ async function readGladosSession() {
   const expiryMs = expirySeconds ? expirySeconds * 1000 : Number(sessionData._expire || 0)
   const status = await statusFromExtensionRequest() || await statusFromOpenTab() || {}
   const fallbackName = sessionData.userId ? `GLaDOS ${sessionData.userId}` : 'GLaDOS 账号'
+  const cookieHeader = [
+    ['koa:sess', legacy],
+    ['koa:sess.sig', legacySig],
+    ['gld:sess', modern],
+    ['gld:sess.sig', modernSig],
+  ].filter(([, cookie]) => cookie?.value)
+    .map(([name, cookie]) => `${name}=${cookie.value}`)
+    .join('; ')
 
   return {
     cookieNamespace,
     sess: sess.value,
     sessSig: sessSig.value,
+    cookieHeader,
     username: status.username || status.email || fallbackName,
     email: status.email || '',
     cookieExpiresAt: Number.isFinite(expiryMs) && expiryMs > 0 ? new Date(expiryMs).toISOString() : '',

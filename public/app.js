@@ -164,7 +164,7 @@ function accountTable() {
   return `<div class="table-wrap"><table><thead><tr><th>账号</th><th>Cookie</th><th>定时</th><th>状态</th><th>最近运行</th><th>操作</th></tr></thead><tbody>${state.accounts.map((item) => {
     const running = state.jobs[item.id] || jobLabel(item.activeJob)
     const browser = item.checkinMethod === 'browser'
-    const cookie = browser ? '<span class="badge badge-success">浏览器档案</span><br/><small>独立持久登录</small>' : item.hasCookieSess && item.hasCookieSessSig ? (item.cookieNamespace === 'gld' ? '<span class="badge badge-success">gld Cookie 已保存</span>' : '<span class="badge badge-warn">旧 koa，请重新读取</span>') : item.hasCookie ? '<span class="badge badge-warn">旧格式</span>' : '<span class="badge badge-muted">未保存</span>'
+    const cookie = browser ? '<span class="badge badge-success">浏览器档案</span><br/><small>独立持久登录</small>' : item.hasFullCookie ? '<span class="badge badge-success">完整浏览器 Cookie</span><br/><small>koa + gld 四项</small>' : item.hasCookieSess && item.hasCookieSessSig ? (item.cookieNamespace === 'gld' ? '<span class="badge badge-warn">仅 gld 两项</span><br/><small>建议一键读取完整 Cookie</small>' : '<span class="badge badge-warn">旧 koa，请重新读取</span>') : item.hasCookie ? '<span class="badge badge-warn">旧格式</span>' : '<span class="badge badge-muted">未保存</span>'
     return `<tr><td><strong>${esc(item.label)}</strong>${item.email ? `<br/><span class="mono">${esc(item.email)}</span>` : ''}</td><td>${cookie}${browser ? '' : `<br/><small>${item.cookieExpiresAt ? `过期：${fmt(item.cookieExpiresAt)}` : '未设置过期时间'}</small>`}</td><td>${item.enabled ? `<strong>${esc(item.scheduleTime)} – ${esc(item.scheduleEndTime || item.scheduleTime)}</strong><br/><span class="mono">${esc(item.scheduleTimezone)}</span>` : '<span class="badge badge-muted">已关闭</span>'}</td><td>${running ? '<span class="badge badge-running">' + esc(running) + '中</span>' : badge(item.lastStatus)}<br/><small>${esc(item.lastMessage || '')}</small></td><td>${fmt(item.lastCheckedAt)}</td><td>${browser ? `<button class="btn btn-ghost" data-browser-login="${item.id}" ${running ? 'disabled' : ''}>打开登录浏览器</button> ` : '<button class="btn btn-ghost" data-login="' + item.id + '" ' + (running ? 'disabled' : '') + '>检测</button> '}<button class="btn btn-primary" data-checkin="${item.id}" ${running ? 'disabled' : ''}>签到</button> <button class="btn btn-ghost" data-edit="${item.id}" ${running ? 'disabled' : ''}>编辑</button> <button class="btn btn-danger" data-delete="${item.id}" ${running ? 'disabled' : ''}>删除</button></td></tr>`
   }).join('')}</tbody></table></div><div class="warning-summary">${state.accounts.map((item) => `<small><strong>${esc(item.label)}</strong> · ${esc(cookieWarningSummary(item))}</small>`).join('')}</div>`
 }
@@ -179,14 +179,14 @@ function accountModal() {
   const item = state.editing || {}
   return `<div class="modal"><section class="modal-card">
     <div class="modal-head"><h2>${item.id ? '编辑 Cookie' : '添加 Cookie'}</h2>
-      <div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.2.0.zip" download="glados-cookie-helper-v1.2.0.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载读取 Cookie 插件</a>
+      <div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.3.0.zip" download="glados-cookie-helper-v1.3.0.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载读取 Cookie 插件</a>
       <button type="button" class="btn btn-import" data-import-browser-cookie title="从当前浏览器的 GLaDOS 登录状态读取 Cookie">一键读取浏览器 Cookie</button></div>
     </div>
     <form id="account-form" class="form-grid">
       <div class="field"><label>显示名称</label><input name="label" value="${esc(item.label)}" required /></div>
       <div class="field"><label>备注邮箱（可选）</label><input name="email" type="email" value="${esc(item.email)}" /></div>
       <div class="field full"><label>签到方式</label><select name="checkinMethod" data-checkin-method><option value="http" ${(item.checkinMethod || 'http') === 'http' ? 'selected' : ''}>HTTP 请求</option><option value="browser" ${item.checkinMethod === 'browser' ? 'selected' : ''}>浏览器页面点击（实验）</option></select><small>浏览器模式保存每个账号独立的浏览器登录档案，并由页面点击签到按钮。首次使用请保存后点击“打开登录浏览器”。</small></div>
-      <div class="field full"><label>会话 Cookie 类型</label><select name="cookieNamespace"><option value="gld" ${(item.cookieNamespace || 'gld') === 'gld' ? 'selected' : ''}>gld（当前站点）</option><option value="koa" ${item.cookieNamespace === 'koa' ? 'selected' : ''}>koa（旧版，需要重新读取）</option></select><small>当前站点使用 gld:sess 和 gld:sess.sig。旧账号请更新插件到 1.2.0 后重新读取并保存；两项必须来自同一登录会话。</small></div>
+      <div class="field full"><label>会话 Cookie 类型</label><select name="cookieNamespace"><option value="gld" ${(item.cookieNamespace || 'gld') === 'gld' ? 'selected' : ''}>gld（当前站点）</option><option value="koa" ${item.cookieNamespace === 'koa' ? 'selected' : ''}>koa（旧版，需要重新读取）</option></select><small>真实浏览器签到会同时携带 koa:sess、koa:sess.sig、gld:sess、gld:sess.sig。请优先用新版插件一键读取完整 Cookie。</small></div>
       <div class="field"><label>会话值（gld:sess / 旧版 koa:sess）</label><input name="sess" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 gld:sess 的值'}" ${item.id ? '' : 'required'} /></div>
       <div class="field"><label>签名（gld:sess.sig / 旧版 koa:sess.sig）</label><input name="sessSig" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 gld:sess.sig 的值'}" ${item.id ? '' : 'required'} /></div>
       <div class="field full"><label>Cookie 过期时间（可选）</label><input name="cookieExpiresAt" type="datetime-local" value="${esc(toLocalInput(item.cookieExpiresAt))}" /></div>
@@ -222,10 +222,20 @@ function bindActions() {
     button.textContent = '正在读取...'
     try {
       const data = await readBrowserCookie()
-      if (!data.cookieNamespace) throw new Error('读取插件版本过旧，请下载并更新到 1.2.0 后重试')
+      if (!data.cookieNamespace) throw new Error('读取插件版本过旧，请下载并更新到 1.3.0 后重试')
       form.elements.cookieNamespace.value = data.cookieNamespace
       form.elements.sess.value = data.sess || ''
       form.elements.sessSig.value = data.sessSig || ''
+      if (data.cookieHeader) {
+        let hidden = form.elements.cookieHeader
+        if (!hidden) {
+          hidden = document.createElement('input')
+          hidden.type = 'hidden'
+          hidden.name = 'cookieHeader'
+          form.append(hidden)
+        }
+        hidden.value = data.cookieHeader
+      }
       form.elements.label.value = data.username || data.email || form.elements.label.value
       if (data.email) form.elements.email.value = data.email
       if (data.cookieExpiresAt) form.elements.cookieExpiresAt.value = toLocalInput(data.cookieExpiresAt)

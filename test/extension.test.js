@@ -29,6 +29,7 @@ test('extension prefers a complete gld pair over stale koa and uses earliest exp
   assert.equal(result.cookieNamespace, 'gld')
   assert.equal(result.sess, 'new-session')
   assert.equal(result.sessSig, 'new-signature')
+  assert.equal(result.cookieHeader, 'koa:sess=old-session; koa:sess.sig=old-signature; gld:sess=new-session; gld:sess.sig=new-signature')
   assert.equal(result.cookieExpiresAt, new Date(1900000000000).toISOString())
 })
 

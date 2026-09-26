@@ -106,6 +106,7 @@ export function accountPublic(row) {
     imapUser: row.imap_user,
     webhookUrl: row.webhook_url || '',
     hasCookie: Boolean((row.cookie_sess_enc && row.cookie_sess_sig_enc) || row.cookie_enc),
+    hasFullCookie: Boolean(row.cookie_enc),
     hasCookieSess: Boolean(row.cookie_sess_enc),
     hasCookieSessSig: Boolean(row.cookie_sess_sig_enc),
     cookieNamespace: row.cookie_namespace || 'koa',

@@ -105,6 +105,7 @@ app.post('/api/accounts', requireAuth, (req, res) => {
   const body = req.body || {}
   let accountCheckinMethod
   if (!text(body.label)) return res.status(400).json({ error: '请填写显示名称' })
+  const cookieHeader = text(body.cookieHeader)
   let accountCookieNamespace
   let cookieExpiresAt = null
   let accountWebhookUrl = null
@@ -115,7 +116,7 @@ app.post('/api/accounts', requireAuth, (req, res) => {
   let cookieWarningEnabled
   try {
     accountCheckinMethod = checkinMethod(body.checkinMethod)
-    if (accountCheckinMethod === 'http' && (!text(body.sess) || !text(body.sessSig))) throw new Error('HTTP 签到需要填写同一组会话 Cookie 的两项值')
+    if (accountCheckinMethod === 'http' && !cookieHeader && (!text(body.sess) || !text(body.sessSig))) throw new Error('HTTP 签到需要填写完整浏览器 Cookie，或填写同一组会话 Cookie 的两项值')
     accountCookieNamespace = cookieNamespace(body.cookieNamespace)
     cookieExpiresAt = dateOrNull(body.cookieExpiresAt)
     accountWebhookUrl = webhookUrl(body.webhookUrl)
@@ -130,7 +131,7 @@ app.post('/api/accounts', requireAuth, (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     text(body.label), text(body.email), '', 993, 1, '', '',
     accountWebhookUrl, text(body.webhookSecret) ? encrypt(body.webhookSecret) : null,
-    null, encrypt(text(body.sess)), encrypt(text(body.sessSig)), cookieExpiresAt,
+    cookieHeader ? encrypt(cookieHeader) : null, text(body.sess) ? encrypt(text(body.sess)) : null, text(body.sessSig) ? encrypt(text(body.sessSig)) : null, cookieExpiresAt,
     accountScheduleTime, accountScheduleEndTime, accountScheduleTimezone, body.enabled === false ? 0 : 1, cookieWarningEnabled ? 1 : 0, cookieWarningDays, now, now, accountCookieNamespace, accountCheckinMethod,
   )
   res.status(201).json({ account: accountPublic(getAccount(result.lastInsertRowid)) })
@@ -139,6 +140,7 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
   const account = getAccount(req.params.id)
   if (!account) return res.status(404).json({ error: '账号不存在' })
   const body = req.body || {}
+  const cookieHeader = text(body.cookieHeader)
   let accountCookieNamespace = account.cookie_namespace || 'koa'
   let accountCheckinMethod = account.checkin_method || 'http'
   let cookieExpiresAt = account.cookie_expires_at
@@ -150,9 +152,9 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
   let cookieWarningEnabled
   try {
     accountCheckinMethod = checkinMethod(body.checkinMethod, accountCheckinMethod)
-    if (accountCheckinMethod === 'http' && (!account.cookie_sess_enc || !account.cookie_sess_sig_enc) && (!text(body.sess) || !text(body.sessSig))) throw new Error('HTTP 签到需要填写同一组会话 Cookie 的两项值')
+    if (accountCheckinMethod === 'http' && !account.cookie_enc && !cookieHeader && (!account.cookie_sess_enc || !account.cookie_sess_sig_enc) && (!text(body.sess) || !text(body.sessSig))) throw new Error('HTTP 签到需要填写完整浏览器 Cookie，或填写同一组会话 Cookie 的两项值')
     accountCookieNamespace = cookieNamespace(body.cookieNamespace, accountCookieNamespace)
-    if (accountCookieNamespace !== account.cookie_namespace && (!text(body.sess) || !text(body.sessSig))) throw new Error('切换 Cookie 类型时必须重新填写同一组会话的两项值')
+    if (accountCookieNamespace !== account.cookie_namespace && !cookieHeader && (!text(body.sess) || !text(body.sessSig))) throw new Error('切换 Cookie 类型时必须重新读取完整浏览器 Cookie，或重新填写同一组会话的两项值')
     if (Boolean(text(body.sess)) !== Boolean(text(body.sessSig))) throw new Error('请同时更新会话 Cookie 和签名，避免混用不同登录会话')
     if (body.cookieExpiresAt !== undefined) cookieExpiresAt = dateOrNull(body.cookieExpiresAt)
     if (body.webhookUrl !== undefined) accountWebhookUrl = webhookUrl(body.webhookUrl)
@@ -165,13 +167,14 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
   const now = new Date().toISOString()
   const sessEnc = text(body.sess) ? encrypt(text(body.sess)) : account.cookie_sess_enc
   const sessSigEnc = text(body.sessSig) ? encrypt(text(body.sessSig)) : account.cookie_sess_sig_enc
+  const fullCookieEnc = cookieHeader ? encrypt(cookieHeader) : (text(body.sess) || text(body.sessSig) ? null : account.cookie_enc)
   const secretEnc = body.webhookSecret === '' ? null : (text(body.webhookSecret) ? encrypt(body.webhookSecret) : account.webhook_secret_enc)
   const enabled = body.enabled === undefined ? account.enabled : body.enabled === false ? 0 : 1
   const scheduleChanged = accountScheduleEndTime !== account.schedule_end_time || accountScheduleTime !== account.schedule_time || accountScheduleTimezone !== account.schedule_timezone || enabled !== account.enabled
   const lastScheduledDate = account.last_scheduled_date
-  db.prepare(`UPDATE accounts SET label=?, email=?, webhook_url=?, webhook_secret_enc=?, cookie_sess_enc=?, cookie_sess_sig_enc=?, cookie_expires_at=?, schedule_time=?, schedule_end_time=?, schedule_timezone=?, enabled=?, cookie_warning_enabled=?, cookie_warning_days=?, last_scheduled_date=?, schedule_plan_date=?, schedule_plan_minute=?, updated_at=?, cookie_namespace=?, checkin_method=? WHERE id=?`).run(
+  db.prepare(`UPDATE accounts SET label=?, email=?, webhook_url=?, webhook_secret_enc=?, cookie_enc=?, cookie_sess_enc=?, cookie_sess_sig_enc=?, cookie_expires_at=?, schedule_time=?, schedule_end_time=?, schedule_timezone=?, enabled=?, cookie_warning_enabled=?, cookie_warning_days=?, last_scheduled_date=?, schedule_plan_date=?, schedule_plan_minute=?, updated_at=?, cookie_namespace=?, checkin_method=? WHERE id=?`).run(
     text(body.label, account.label), text(body.email, account.email), accountWebhookUrl, secretEnc,
-    sessEnc, sessSigEnc, cookieExpiresAt, accountScheduleTime, accountScheduleEndTime, accountScheduleTimezone,
+    fullCookieEnc, sessEnc, sessSigEnc, cookieExpiresAt, accountScheduleTime, accountScheduleEndTime, accountScheduleTimezone,
     enabled, cookieWarningEnabled ? 1 : 0, cookieWarningDays, lastScheduledDate, scheduleChanged ? null : account.schedule_plan_date, scheduleChanged ? null : account.schedule_plan_minute, now, accountCookieNamespace, accountCheckinMethod, account.id,
   )
   res.json({ account: accountPublic(getAccount(account.id)) })

@@ -201,6 +201,24 @@ test('gld cookie namespace is sent unchanged and never relabeled as koa', async 
   } finally { await client.close() }
 })
 
+test('complete browser cookie header sends koa and gld session cookies together', async () => {
+  mode = 'modern'
+  counts = {}
+  receivedCookies = []
+  const cookieHeader = 'koa:sess=old-session; koa:sess.sig=old-signature; gld:sess=modern-session; gld:sess.sig=modern-signature'
+  const client = new GladosClient({ ...account, cookie_namespace: 'gld', cookie_enc: encrypt(cookieHeader) })
+  try {
+    await client.open()
+    assert.equal((await client.checkin()).status, 'success')
+    assert.ok(receivedCookies.every(value => (
+      value.includes('koa:sess=old-session')
+      && value.includes('koa:sess.sig=old-signature')
+      && value.includes('gld:sess=modern-session')
+      && value.includes('gld:sess.sig=modern-signature')
+    )))
+  } finally { await client.close() }
+})
+
 test('HTTP 200 with business code -2 explains session migration and skips POST', () => useClient('business-unauthorized', async (client) => {
   const result = await client.checkin()
   assert.equal(result.status, 'login_required')

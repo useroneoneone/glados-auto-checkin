@@ -71,6 +71,14 @@ function splitSessionCookies(account) {
   ].filter((cookie) => cookie.value)
 }
 
+function decryptCookieHeader(account) {
+  if (!account.cookie_enc) return []
+  const cookieHeader = decrypt(account.cookie_enc)
+  const cookies = parseCookieHeader.call({ account }, cookieHeader)
+  if (!cookies.length) throw new Error('Cookie 格式无效，请用新版插件重新读取完整浏览器 Cookie')
+  return cookies
+}
+
 export class GladosClient {
   constructor(account) {
     this.account = account
@@ -89,14 +97,12 @@ export class GladosClient {
     if (!this.account.cookie_enc && !this.account.cookie_sess_enc && this.account.storage_state_enc) {
       try { options.storageState = JSON.parse(decrypt(this.account.storage_state_enc)) } catch { /* stale state */ }
     }
+    const fullCookieHeader = decryptCookieHeader(this.account)
     const sessionCookies = splitSessionCookies(this.account)
-    if (sessionCookies.length === 2) {
+    if (fullCookieHeader.length) {
+      options.storageState = { cookies: fullCookieHeader, origins: [] }
+    } else if (sessionCookies.length === 2) {
       options.storageState = { cookies: sessionCookies, origins: [] }
-    } else if (this.account.cookie_enc) {
-      const cookieHeader = decrypt(this.account.cookie_enc)
-      const cookies = parseCookieHeader.call(this, cookieHeader)
-      if (!cookies.length) throw new Error('Cookie 格式无效，请粘贴浏览器请求头里的 Cookie 字符串')
-      options.storageState = { cookies, origins: [] }
     }
     this.api = await request.newContext(options)
   }

@@ -31,6 +31,7 @@ app.use((req, res, next) => {
 const requireAuth = (req, res, next) => req.session.admin ? next() : res.status(401).json({ error: '未登录' })
 const getAccount = (id) => db.prepare('SELECT * FROM accounts WHERE id = ?').get(Number(id))
 const text = (value, fallback = '') => String(value ?? fallback).trim()
+const COOKIE_FORMAT_VERSION = 5
 const completeCookieHeader = (body) => {
   const cookies = [
     ['koa:sess', text(body.koaSess)],
@@ -38,13 +39,16 @@ const completeCookieHeader = (body) => {
     ['gld:sess', text(body.gldSess)],
     ['gld:sess.sig', text(body.gldSessSig)],
   ]
-  const supplied = cookies.filter(([, value]) => value)
-  if (supplied.length && supplied.length !== cookies.length) throw new Error('手动填写 Cookie 时必须同时提供 koa:sess、koa:sess.sig、gld:sess、gld:sess.sig 四项')
-  const header = supplied.length ? cookies.map(([name, value]) => `${name}=${value}`).join('; ') : text(body.cookieHeader)
+  const [koaSess, koaSessSig, gldSess, gldSessSig] = cookies.map(([, value]) => value)
+  const manuallySupplied = cookies.some(([, value]) => value)
+  if (manuallySupplied && (!gldSess || !gldSessSig)) throw new Error('手动填写 Cookie 时必须同时提供 gld:sess 和 gld:sess.sig')
+  if (manuallySupplied && Boolean(koaSess) !== Boolean(koaSessSig)) throw new Error('若填写 koa Cookie，必须同时提供 koa:sess 和 koa:sess.sig')
+  const header = manuallySupplied ? cookies.filter(([, value]) => value).map(([name, value]) => `${name}=${value}`).join('; ') : text(body.cookieHeader)
   if (!header) return ''
   const names = new Set(header.split(';').map((part) => part.trim().split('=', 1)[0]))
-  const missing = cookies.map(([name]) => name).filter((name) => !names.has(name))
-  if (missing.length) throw new Error(`完整 Cookie 缺少：${missing.join('、')}`)
+  const missing = ['gld:sess', 'gld:sess.sig'].filter((name) => !names.has(name))
+  if (missing.length) throw new Error(`Cookie 至少需要：${missing.join('、')}`)
+  if (names.has('koa:sess') !== names.has('koa:sess.sig')) throw new Error('若包含 koa Cookie，必须同时包含 koa:sess 和 koa:sess.sig')
   return header
 }
 const checkinMethod = (value, fallback = 'http') => {
@@ -127,7 +131,7 @@ app.post('/api/accounts', requireAuth, (req, res) => {
   try {
     cookieHeader = completeCookieHeader(body)
     accountCheckinMethod = checkinMethod(body.checkinMethod)
-    if (!cookieHeader) throw new Error('HTTP 签到需要完整的四项浏览器 Cookie')
+    if (!cookieHeader) throw new Error('HTTP 签到至少需要 gld:sess 和 gld:sess.sig')
     cookieExpiresAt = dateOrNull(body.cookieExpiresAt)
     accountWebhookUrl = webhookUrl(body.webhookUrl)
     accountScheduleTime = scheduleTime(body.scheduleTime)
@@ -142,7 +146,7 @@ app.post('/api/accounts', requireAuth, (req, res) => {
     text(body.label), text(body.email), '', 993, 1, '', '',
     accountWebhookUrl, text(body.webhookSecret) ? encrypt(body.webhookSecret) : null,
     encrypt(cookieHeader), null, null, cookieExpiresAt,
-    accountScheduleTime, accountScheduleEndTime, accountScheduleTimezone, body.enabled === false ? 0 : 1, cookieWarningEnabled ? 1 : 0, cookieWarningDays, now, now, 'gld', accountCheckinMethod, 4,
+    accountScheduleTime, accountScheduleEndTime, accountScheduleTimezone, body.enabled === false ? 0 : 1, cookieWarningEnabled ? 1 : 0, cookieWarningDays, now, now, 'gld', accountCheckinMethod, COOKIE_FORMAT_VERSION,
   )
   res.status(201).json({ account: accountPublic(getAccount(result.lastInsertRowid)) })
 })
@@ -162,7 +166,7 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
   try {
     cookieHeader = completeCookieHeader(body)
     accountCheckinMethod = checkinMethod(body.checkinMethod, accountCheckinMethod)
-    if ((!account.cookie_enc || Number(account.cookie_format_version) !== 4) && !cookieHeader) throw new Error('旧账号必须重新导入完整的四项浏览器 Cookie')
+    if ((!account.cookie_enc || Number(account.cookie_format_version) < 4) && !cookieHeader) throw new Error('旧账号必须重新导入浏览器 Cookie')
     if (body.cookieExpiresAt !== undefined) cookieExpiresAt = dateOrNull(body.cookieExpiresAt)
     if (body.webhookUrl !== undefined) accountWebhookUrl = webhookUrl(body.webhookUrl)
     if (body.scheduleTime !== undefined) accountScheduleTime = scheduleTime(body.scheduleTime)
@@ -180,7 +184,7 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
   db.prepare(`UPDATE accounts SET label=?, email=?, webhook_url=?, webhook_secret_enc=?, cookie_enc=?, cookie_sess_enc=?, cookie_sess_sig_enc=?, cookie_expires_at=?, schedule_time=?, schedule_end_time=?, schedule_timezone=?, enabled=?, cookie_warning_enabled=?, cookie_warning_days=?, last_scheduled_date=?, schedule_plan_date=?, schedule_plan_minute=?, updated_at=?, cookie_namespace=?, checkin_method=?, cookie_format_version=? WHERE id=?`).run(
     text(body.label, account.label), text(body.email, account.email), accountWebhookUrl, secretEnc,
     fullCookieEnc, null, null, cookieExpiresAt, accountScheduleTime, accountScheduleEndTime, accountScheduleTimezone,
-    enabled, cookieWarningEnabled ? 1 : 0, cookieWarningDays, lastScheduledDate, scheduleChanged ? null : account.schedule_plan_date, scheduleChanged ? null : account.schedule_plan_minute, now, 'gld', accountCheckinMethod, 4, account.id,
+    enabled, cookieWarningEnabled ? 1 : 0, cookieWarningDays, lastScheduledDate, scheduleChanged ? null : account.schedule_plan_date, scheduleChanged ? null : account.schedule_plan_minute, now, 'gld', accountCheckinMethod, cookieHeader ? COOKIE_FORMAT_VERSION : account.cookie_format_version, account.id,
   )
   res.json({ account: accountPublic(getAccount(account.id)) })
 })

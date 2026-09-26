@@ -86,7 +86,7 @@ docker compose -f docker-compose.prod.yml up -d
 
 容器不再内置 Chromium、Xvfb、VNC 或 noVNC，也不暴露 6080 端口。签到请求从服务器的原生 HTTP 客户端发出，带有真实浏览器导入的完整 Cookie、来源页和常用浏览器请求头；每次只在随机时间窗内完成一次状态检查和一次签到提交。
 
-当前 Chrome 会话已经核实真实请求同时携带 `koa:sess`、`koa:sess.sig`、`gld:sess`、`gld:sess.sig` 四项。新版插件会按 `glados-facility.com` 域名枚举并保存这四项，而不只依赖两项 Cookie。服务端将其加密后作为一个 Cookie 请求头发送。
+新版插件以 `gld:sess`、`gld:sess.sig` 为必需登录态；若浏览器同时保存 `koa:sess`、`koa:sess.sig`，会将四项一并导入。服务端将导入内容加密后作为 Cookie 请求头发送。
 
 站点仍可能依据服务器 IP、TLS 指纹或其他服务端规则拒绝 HTTP 请求；出现 `Automated check-in detected` 时，记录会保留原提示且不会自动重放 POST。重新登录并重新导入完整 Cookie 后再测试即可。
 
@@ -99,15 +99,15 @@ docker compose -f docker-compose.prod.yml up -d
 运行时使用 Node 原生 `fetch`，没有 Playwright 或浏览器运行时依赖。
 
 1. 在后台点击“添加 Cookie”。
-2. 优先点击“一键读取浏览器 Cookie”，导入同一登录会话中的完整四项 Cookie。手动填写时，必须同时填写 `koa:sess`、`koa:sess.sig`、`gld:sess`、`gld:sess.sig` 四项的值。
+2. 优先点击“一键读取浏览器 Cookie”。导入至少包含同一次登录的 `gld:sess`、`gld:sess.sig`；若存在 `koa:sess`、`koa:sess.sig` 会同时保存。手动填写时 koa 两项可选，但两项必须成对填写。
 3. 设置 Cookie 过期时间、每日签到时间、时区和该账号的 Webhook。
 4. 保存后可以点击“检测”或“签到”；Webhook 地址旁的“测试”按钮可单独验证推送。
 
-手动获取 Cookie：登录 `https://glados-facility.com/console/checkin`，按 F12，在 **Application / 应用 → Cookies** 中找到 `glados-facility.com` 下的四项值及过期时间。
+手动获取 Cookie：登录 `https://glados-facility.com/console/checkin`，按 F12，在 **Application / 应用 → Cookies** 中找到 `glados-facility.com` 下的 `gld:sess`、`gld:sess.sig` 及过期时间；若同时存在 koa 两项，也可一起填写。
 
 ### 浏览器插件导入
 
-1. 在账号窗口点击“下载读取 Cookie 插件”，下载 1.6.0 并解压 ZIP。
+1. 在账号窗口点击“下载读取 Cookie 插件”，下载 1.7.0 并解压 ZIP。
 2. 打开 `chrome://extensions/` 或 `edge://extensions/`，开启开发者模式，加载解压后的文件夹。
 3. 在同一浏览器中登录 GLaDOS，再打开签到管理后台。
 4. 点击插件图标，选择“永久授权当前网站”，随后回到后台点击“一键读取浏览器 Cookie”。

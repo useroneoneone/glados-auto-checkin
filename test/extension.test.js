@@ -47,12 +47,22 @@ test('extension falls back to a name lookup when direct Chrome cookie reads are 
   assert.equal(result.cookieHeader, 'koa:sess=old-session; koa:sess.sig=old-signature; gld:sess=new-session; gld:sess.sig=new-signature')
 })
 
-test('extension rejects any incomplete four-cookie session', async () => {
+test('extension imports the current two-cookie GLaDOS session', async () => {
+  const result = await readSession({
+    'gld:sess': cookie('new-session', 2000000000),
+    'gld:sess.sig': cookie('new-signature', 1900000000),
+  })
+  assert.equal(result.cookieHeader, 'gld:sess=new-session; gld:sess.sig=new-signature')
+  assert.deepEqual([...result.cookieNames], ['gld:sess', 'gld:sess.sig'])
+  assert.equal(result.cookieExpiresAt, new Date(1900000000000).toISOString())
+})
+
+test('extension rejects a partial modern session', async () => {
   await assert.rejects(readSession({
     'gld:sess': cookie('new'), 'koa:sess': cookie('old'), 'koa:sess.sig': cookie('old-signature'),
-  }), /四项/)
+  }), /完整的 GLaDOS Cookie/)
 })
 
 test('extension rejects the legacy-only pair', async () => {
-  await assert.rejects(readSession({ 'koa:sess': cookie('old'), 'koa:sess.sig': cookie('sig') }), /四项/)
+  await assert.rejects(readSession({ 'koa:sess': cookie('old'), 'koa:sess.sig': cookie('sig') }), /完整的 GLaDOS Cookie/)
 })

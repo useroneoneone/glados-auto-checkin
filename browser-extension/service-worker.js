@@ -110,18 +110,22 @@ async function readGladosSession() {
     ))
   }
   const [legacy, legacySig, modern, modernSig] = resolvedCookies
-  const requiredCookies = [legacy, legacySig, modern, modernSig]
-  if (requiredCookies.some((cookie) => !cookie)) throw new Error('当前浏览器没有找到完整的四项 GLaDOS Cookie，请重新登录后重试')
+  const modernCookies = [modern, modernSig]
+  if (modernCookies.some((cookie) => !cookie)) throw new Error('当前浏览器没有找到完整的 GLaDOS Cookie，请重新登录后重试')
+  const legacyCookies = legacy && legacySig ? [legacy, legacySig] : []
+  const importedCookies = [...legacyCookies, ...modernCookies]
 
   const sessionData = decodeSession(modern.value)
-  const expirations = requiredCookies.map((cookie) => cookie.expirationDate).filter(value => Number.isFinite(value) && value > 0)
+  const expirations = importedCookies.map((cookie) => cookie.expirationDate).filter(value => Number.isFinite(value) && value > 0)
   const expirySeconds = expirations.length ? Math.min(...expirations) : null
   const expiryMs = expirySeconds ? expirySeconds * 1000 : Number(sessionData._expire || 0)
   const status = await statusFromExtensionRequest() || await statusFromOpenTab() || {}
   const fallbackName = sessionData.userId ? `GLaDOS ${sessionData.userId}` : 'GLaDOS 账号'
   const cookieParts = [
-    ['koa:sess', legacy],
-    ['koa:sess.sig', legacySig],
+    ...(legacyCookies.length ? [
+      ['koa:sess', legacy],
+      ['koa:sess.sig', legacySig],
+    ] : []),
     ['gld:sess', modern],
     ['gld:sess.sig', modernSig],
   ].filter(([, cookie]) => cookie?.value)

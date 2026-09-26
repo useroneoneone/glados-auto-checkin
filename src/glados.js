@@ -5,7 +5,8 @@ import { safeErrorMessage } from './errors.js'
 
 const CHECKIN_URL = `${config.gladosOrigin}/console/checkin`
 const COOKIE_ATTRIBUTE_NAMES = new Set(['path', 'domain', 'expires', 'max-age', 'secure', 'httponly', 'samesite', 'priority'])
-const REQUIRED_COOKIE_NAMES = ['koa:sess', 'koa:sess.sig', 'gld:sess', 'gld:sess.sig']
+const REQUIRED_COOKIE_NAMES = ['gld:sess', 'gld:sess.sig']
+const SUPPORTED_COOKIE_FORMAT_VERSIONS = new Set([4, 5])
 
 function checkinMessage(payload) {
   return String(payload?.message || payload?.msg || payload?.data?.message || '')
@@ -47,7 +48,7 @@ function decryptCookieHeader(account) {
   const value = cookieHeader(decrypt(account.cookie_enc))
   const names = new Set(value.split(';').map((part) => part.trim().split('=', 1)[0]))
   const missing = REQUIRED_COOKIE_NAMES.filter((name) => !names.has(name))
-  if (!value || missing.length) throw new Error(`Cookie 格式无效，请重新读取完整四项 Cookie${missing.length ? `：${missing.join('、')}` : ''}`)
+  if (!value || missing.length) throw new Error(`Cookie 格式无效，请重新读取 gld:sess 和 gld:sess.sig${missing.length ? `：${missing.join('、')}` : ''}`)
   return value
 }
 
@@ -59,9 +60,9 @@ export class GladosClient {
   }
 
   async open() {
-    if (Number(this.account.cookie_format_version) !== 4) throw new Error('Cookie 格式已升级，请重新导入完整的四项浏览器 Cookie')
+    if (!SUPPORTED_COOKIE_FORMAT_VERSIONS.has(Number(this.account.cookie_format_version))) throw new Error('Cookie 格式已升级，请重新导入浏览器 Cookie')
     this.cookie = decryptCookieHeader(this.account)
-    if (!this.cookie) throw new Error('未保存完整 Cookie，请用新版插件重新读取')
+    if (!this.cookie) throw new Error('未保存 Cookie，请用新版插件重新读取')
   }
 
   async requestJson(path, { method = 'GET', data } = {}) {
@@ -107,7 +108,7 @@ export class GladosClient {
     const data = json?.data || json
     const loggedIn = (json?.code == null || Number(json.code) === 0)
       && Boolean(data?.email || data?.isLogin === true || data?.loggedIn === true || data?.user || data?.username)
-    return { loggedIn, data, message: loggedIn ? '' : '登录态无效，请用新版插件重新读取完整 Cookie（koa:sess、koa:sess.sig、gld:sess、gld:sess.sig）' }
+    return { loggedIn, data, message: loggedIn ? '' : '登录态无效，请用新版插件重新读取 Cookie（至少包含 gld:sess、gld:sess.sig）' }
   }
 
   async checkin() {

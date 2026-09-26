@@ -2,7 +2,7 @@
 
 该扩展用于把当前 Chrome/Edge 用户配置中的 GLaDOS 登录信息填入签到控制台。
 
-1.5.0 会按域名读取当前 Chrome Cookie 存储，并将签到请求中实际使用的四项 Cookie 一并导入：`koa:sess`、`koa:sess.sig`、`gld:sess`、`gld:sess.sig`。缺少其中任何一项都会提示重新登录，界面只提示读取到的 Cookie 名称，不显示其值。
+1.7.0 会按域名读取当前 Chrome Cookie 存储。`gld:sess`、`gld:sess.sig` 是必需的登录态；若同时有 `koa:sess`、`koa:sess.sig`，扩展会将四项一并导入。界面只提示读取到的 Cookie 名称，不显示其值。
 
 从旧版升级：下载并解压新版，在扩展管理页移除旧扩展后加载新版目录，再刷新签到后台；编辑旧账号，点击“一键读取浏览器 Cookie”并保存。仅更新服务端或把旧值换名称都不足以迁移登录态。
 

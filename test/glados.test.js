@@ -160,9 +160,21 @@ test('cookie headers are independent between accounts', () => useClient('normal'
   } finally { await second.close() }
 }))
 
+test('a current two-cookie browser session is accepted and sent unchanged', async () => {
+  mode = 'normal'
+  counts = {}
+  receivedCookies = []
+  const client = new GladosClient({ cookie_format_version: 5, cookie_enc: encrypt('gld:sess=current-session; gld:sess.sig=current-signature') })
+  try {
+    await client.open()
+    assert.equal((await client.status()).loggedIn, true)
+    assert.equal(receivedCookies.at(-1), 'gld:sess=current-session; gld:sess.sig=current-signature')
+  } finally { await client.close() }
+})
+
 test('incomplete Cookie headers are rejected before requests', async () => {
   const client = new GladosClient({ cookie_format_version: 4, cookie_enc: encrypt('Cookie: koa:sess=legacy; koa:sess.sig=legacy-sig; Path=/; HttpOnly') })
-  await assert.rejects(client.open(), /完整四项/)
+  await assert.rejects(client.open(), /gld:sess/)
 })
 
 test('expired cookies skip requests entirely', async () => {

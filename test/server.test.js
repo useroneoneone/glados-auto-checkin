@@ -101,6 +101,14 @@ test('authenticated HTTP jobs deduplicate and webhook tests return 202', { timeo
     })
     assert.equal(fullCookieAccount.response.status, 201)
     assert.equal(fullCookieAccount.data.account.hasFullCookie, true)
+    const twoCookieAccount = await api('/api/accounts', {
+      method: 'POST', body: {
+        label: 'Two Cookie fixture',
+        gldSess: 'gld-session', gldSessSig: 'gld-signature', enabled: false,
+      },
+    })
+    assert.equal(twoCookieAccount.response.status, 201)
+    assert.equal(twoCookieAccount.data.account.hasFullCookie, true)
     const partialCookieAccount = await api('/api/accounts', {
       method: 'POST', body: { label: 'Partial four Cookie fixture', koaSess: 'koa-session', enabled: false },
     })

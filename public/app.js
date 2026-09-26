@@ -163,7 +163,7 @@ function accountTable() {
   if (!state.accounts.length) return '<div class="empty">还没有 Cookie 账号，先添加一个 GLaDOS Cookie 吧。</div>'
   return `<div class="table-wrap"><table><thead><tr><th>账号</th><th>Cookie</th><th>定时</th><th>状态</th><th>最近运行</th><th>操作</th></tr></thead><tbody>${state.accounts.map((item) => {
     const running = state.jobs[item.id] || jobLabel(item.activeJob)
-    const cookie = item.hasFullCookie ? '<span class="badge badge-success">完整浏览器 Cookie</span><br/><small>koa + gld 四项</small>' : '<span class="badge badge-warn">需要重新读取</span><br/><small>请导入完整四项 Cookie</small>'
+    const cookie = item.hasFullCookie ? '<span class="badge badge-success">浏览器 Cookie</span><br/><small>gld 两项或 koa + gld 四项</small>' : '<span class="badge badge-warn">需要重新读取</span><br/><small>请导入 gld 两项 Cookie</small>'
     return `<tr><td><strong>${esc(item.label)}</strong>${item.email ? `<br/><span class="mono">${esc(item.email)}</span>` : ''}</td><td>${cookie}<br/><small>${item.cookieExpiresAt ? `过期：${fmt(item.cookieExpiresAt)}` : '未设置过期时间'}</small></td><td>${item.enabled ? `<strong>${esc(item.scheduleTime)} – ${esc(item.scheduleEndTime || item.scheduleTime)}</strong><br/><span class="mono">${esc(item.scheduleTimezone)}</span>` : '<span class="badge badge-muted">已关闭</span>'}</td><td>${running ? '<span class="badge badge-running">' + esc(running) + '中</span>' : badge(item.lastStatus)}<br/><small>${esc(item.lastMessage || '')}</small></td><td>${fmt(item.lastCheckedAt)}</td><td><button class="btn btn-ghost" data-login="${item.id}" ${running ? 'disabled' : ''}>检测</button> <button class="btn btn-primary" data-checkin="${item.id}" ${running ? 'disabled' : ''}>签到</button> <button class="btn btn-ghost" data-edit="${item.id}" ${running ? 'disabled' : ''}>编辑</button> <button class="btn btn-danger" data-delete="${item.id}" ${running ? 'disabled' : ''}>删除</button></td></tr>`
   }).join('')}</tbody></table></div><div class="warning-summary">${state.accounts.map((item) => `<small><strong>${esc(item.label)}</strong> · ${esc(cookieWarningSummary(item))}</small>`).join('')}</div>`
 }
@@ -178,18 +178,18 @@ function accountModal() {
   const item = state.editing || {}
   return `<div class="modal"><section class="modal-card">
     <div class="modal-head"><h2>${item.id ? '编辑 Cookie' : '添加 Cookie'}</h2>
-      <div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.6.0.zip" download="glados-cookie-helper-v1.6.0.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载读取 Cookie 插件</a>
+      <div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.7.0.zip" download="glados-cookie-helper-v1.7.0.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载读取 Cookie 插件</a>
       <button type="button" class="btn btn-import" data-import-browser-cookie title="从当前浏览器的 GLaDOS 登录状态读取 Cookie">一键读取浏览器 Cookie</button></div>
     </div>
     <form id="account-form" class="form-grid">
       <div class="field"><label>显示名称</label><input name="label" value="${esc(item.label)}" required /></div>
       <div class="field"><label>备注邮箱（可选）</label><input name="email" type="email" value="${esc(item.email)}" /></div>
       <input type="hidden" name="checkinMethod" value="http" />
-      <div class="field full"><label>完整浏览器 Cookie</label><small>手动填写时四项必须来自同一次登录：koa:sess、koa:sess.sig、gld:sess、gld:sess.sig。编辑旧账号时留空可保持已保存的 Cookie。</small></div>
-      <div class="field"><label>koa:sess</label><input name="koaSess" type="password" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 koa:sess 的值'}" /></div>
-      <div class="field"><label>koa:sess.sig</label><input name="koaSessSig" type="password" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 koa:sess.sig 的值'}" /></div>
+      <div class="field full"><label>浏览器 Cookie</label><small>至少填写同一次登录的 gld:sess 和 gld:sess.sig；如果浏览器同时存在 koa:sess 和 koa:sess.sig，也可以一并填写。编辑旧账号时留空可保持已保存的 Cookie。</small></div>
       <div class="field"><label>gld:sess</label><input name="gldSess" type="password" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 gld:sess 的值'}" /></div>
       <div class="field"><label>gld:sess.sig</label><input name="gldSessSig" type="password" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 gld:sess.sig 的值'}" /></div>
+      <div class="field"><label>koa:sess（可选）</label><input name="koaSess" type="password" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 koa:sess 的值'}" /></div>
+      <div class="field"><label>koa:sess.sig（可选）</label><input name="koaSessSig" type="password" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 koa:sess.sig 的值'}" /></div>
       <div class="field full"><label>Cookie 过期时间（可选）</label><input name="cookieExpiresAt" type="datetime-local" value="${esc(toLocalInput(item.cookieExpiresAt))}" /></div>
       <div class="field"><label class="check-label"><input name="cookieWarningEnabled" type="checkbox" ${item.cookieWarningEnabled === false ? '' : 'checked'} />Cookie 到期预警</label></div>
       <div class="field"><label>提前天数</label><input name="cookieWarningDays" type="number" min="1" max="30" step="1" value="${esc(item.cookieWarningDays ?? 3)}" required /></div>
@@ -223,7 +223,7 @@ function bindActions() {
     button.textContent = '正在读取...'
     try {
       const data = await readBrowserCookie()
-      if (!data.cookieHeader) throw new Error('读取插件版本过旧，请下载并更新到 1.6.0 后重试')
+      if (!data.cookieHeader) throw new Error('读取插件版本过旧，请下载并更新到 1.7.0 后重试')
       if (data.cookieHeader) {
         let hidden = form.elements.cookieHeader
         if (!hidden) {

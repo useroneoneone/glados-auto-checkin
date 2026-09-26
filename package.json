@@ -16,7 +16,6 @@
     "express-session": "^1.18.1",
     "imapflow": "^1.0.181",
     "mailparser": "^3.7.2",
-    "node-cron": "^3.0.3",
-    "playwright": "1.55.0"
+    "node-cron": "^3.0.3"
   }
 }

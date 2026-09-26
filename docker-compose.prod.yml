@@ -6,14 +6,11 @@ services:
     init: true
     ports:
       - "${HOST_PORT:-3000}:3000"
-      - "127.0.0.1:${BROWSER_VNC_PORT:-6080}:6080"
     env_file:
       - .env
     environment:
       PORT: 3000
       DATABASE_PATH: /app/data/glados.sqlite
       TZ: ${TZ:-Asia/Shanghai}
-      BROWSER_PROFILES_PATH: /app/data/browser-profiles
-      BROWSER_HEADLESS: "false"
     volumes:
       - ./data:/app/data

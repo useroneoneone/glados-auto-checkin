@@ -71,6 +71,7 @@ if (!accountColumns.includes('cookie_sess_enc')) db.prepare('ALTER TABLE account
 if (!accountColumns.includes('cookie_sess_sig_enc')) db.prepare('ALTER TABLE accounts ADD COLUMN cookie_sess_sig_enc TEXT').run()
 if (!accountColumns.includes('cookie_namespace')) db.exec("ALTER TABLE accounts ADD COLUMN cookie_namespace TEXT NOT NULL DEFAULT 'koa'")
 if (!accountColumns.includes('checkin_method')) db.exec("ALTER TABLE accounts ADD COLUMN checkin_method TEXT NOT NULL DEFAULT 'http'")
+db.prepare("UPDATE accounts SET checkin_method = 'http' WHERE checkin_method <> 'http'").run()
 if (!accountColumns.includes('schedule_time')) db.prepare("ALTER TABLE accounts ADD COLUMN schedule_time TEXT NOT NULL DEFAULT '07:15'").run()
 if (!accountColumns.includes('schedule_timezone')) db.prepare("ALTER TABLE accounts ADD COLUMN schedule_timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai'").run()
 if (!accountColumns.includes('last_scheduled_date')) db.prepare('ALTER TABLE accounts ADD COLUMN last_scheduled_date TEXT').run()

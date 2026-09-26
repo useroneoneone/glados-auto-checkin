@@ -92,12 +92,15 @@ async function statusFromOpenTab() {
 }
 
 async function readGladosSession() {
-  const [modern, modernSig, legacy, legacySig] = await Promise.all([
-    chrome.cookies.get({ url: GLADOS_ORIGIN, name: 'gld:sess' }),
-    chrome.cookies.get({ url: GLADOS_ORIGIN, name: 'gld:sess.sig' }),
-    chrome.cookies.get({ url: GLADOS_ORIGIN, name: 'koa:sess' }),
-    chrome.cookies.get({ url: GLADOS_ORIGIN, name: 'koa:sess.sig' }),
-  ])
+  const hostname = new URL(GLADOS_ORIGIN).hostname
+  const allCookies = await chrome.cookies.getAll({ domain: hostname })
+  const byName = new Map(allCookies
+    .filter((cookie) => cookie.domain.replace(/^\./, '') === hostname && cookie.path === '/')
+    .map((cookie) => [cookie.name, cookie]))
+  const modern = byName.get('gld:sess')
+  const modernSig = byName.get('gld:sess.sig')
+  const legacy = byName.get('koa:sess')
+  const legacySig = byName.get('koa:sess.sig')
   // Never mix namespaces or fall back to stale koa cookies when gld is partial.
   const cookieNamespace = modern || modernSig ? 'gld' : 'koa'
   const [sess, sessSig] = cookieNamespace === 'gld' ? [modern, modernSig] : [legacy, legacySig]
@@ -109,20 +112,21 @@ async function readGladosSession() {
   const expiryMs = expirySeconds ? expirySeconds * 1000 : Number(sessionData._expire || 0)
   const status = await statusFromExtensionRequest() || await statusFromOpenTab() || {}
   const fallbackName = sessionData.userId ? `GLaDOS ${sessionData.userId}` : 'GLaDOS 账号'
-  const cookieHeader = [
+  const cookieParts = [
     ['koa:sess', legacy],
     ['koa:sess.sig', legacySig],
     ['gld:sess', modern],
     ['gld:sess.sig', modernSig],
   ].filter(([, cookie]) => cookie?.value)
     .map(([name, cookie]) => `${name}=${cookie.value}`)
-    .join('; ')
+  const cookieHeader = cookieParts.join('; ')
 
   return {
     cookieNamespace,
     sess: sess.value,
     sessSig: sessSig.value,
     cookieHeader,
+    cookieNames: cookieParts.map((part) => part.slice(0, part.indexOf('='))),
     username: status.username || status.email || fallbackName,
     email: status.email || '',
     cookieExpiresAt: Number.isFinite(expiryMs) && expiryMs > 0 ? new Date(expiryMs).toISOString() : '',

@@ -9,7 +9,7 @@ function readSession(cookies) {
     URL, TextDecoder, Uint8Array, atob,
     fetch: async () => ({ ok: true, json: async () => ({ email: 'fixture@example.test' }) }),
     chrome: {
-      cookies: { get: async ({ name }) => cookies[name] || null },
+      cookies: { getAll: async () => Object.entries(cookies).map(([name, value]) => ({ name, domain: 'glados-facility.com', path: '/', ...value })) },
       runtime: { onMessage: { addListener() {} } },
       permissions: { onRemoved: { addListener() {} } },
     },
@@ -30,6 +30,7 @@ test('extension prefers a complete gld pair over stale koa and uses earliest exp
   assert.equal(result.sess, 'new-session')
   assert.equal(result.sessSig, 'new-signature')
   assert.equal(result.cookieHeader, 'koa:sess=old-session; koa:sess.sig=old-signature; gld:sess=new-session; gld:sess.sig=new-signature')
+  assert.deepEqual([...result.cookieNames], ['koa:sess', 'koa:sess.sig', 'gld:sess', 'gld:sess.sig'])
   assert.equal(result.cookieExpiresAt, new Date(1900000000000).toISOString())
 })
 

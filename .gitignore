@@ -6,4 +6,6 @@ node_modules/
 *.zip
 !public/downloads/glados-cookie-helper-v1.1.0.zip
 !public/downloads/glados-cookie-helper-v1.2.0.zip
+!public/downloads/glados-cookie-helper-v1.3.0.zip
+!public/downloads/glados-cookie-helper-v1.4.0.zip
 npm-debug.log*

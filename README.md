@@ -2,10 +2,10 @@
 
 使用 Cookie 管理多个 GLaDOS 账号，支持定时签到、独立 Webhook、Cookie 到期预警和浏览器插件导入。
 
-- HTTP 模式的手动签到、定时签到和登录检测统一排队，不启动浏览器；浏览器模式使用可见的持久化 Chromium 档案进行页面点击。
+- 手动签到、定时签到和登录检测统一排队，只使用 Node 原生 HTTP 客户端，不启动浏览器。
 - GET 临时网络错误有限重试，结果不明的签到提交不会自动重放。
 - 每个账号独立配置随机入队时间段、时区、Webhook 和到期预警。
-- 可选浏览器页面点击模式：每个账号保存独立浏览器档案，由用户完成登录后定时点击官网的签到按钮。
+- 浏览器插件从登录中的 Chrome/Edge 导入完整 Cookie；服务端只保存加密后的会话数据。
 - 后台有账号密码鉴权，Cookie 和 Webhook Secret 加密保存，数据存放在 `data/`。
 - GitHub 自动测试并构建 Docker 镜像，服务器只需拉取和启动，无需现场构建。
 
@@ -82,19 +82,13 @@ docker compose -f docker-compose.prod.yml up -d
 
 ## 添加账号
 
-## 浏览器页面点击模式（实验）
+## 轻量运行方式
 
-浏览器模式适合 HTTP 签到被站点拒绝的账号。账号编辑页选择“浏览器页面点击”，保存后点击“打开登录浏览器”。服务为每个账号在 `data/browser-profiles/` 创建独立的 Chromium 登录档案；Cookie 和站点本地状态不会进入应用数据库。
+容器不再内置 Chromium、Xvfb、VNC 或 noVNC，也不暴露 6080 端口。签到请求从服务器的原生 HTTP 客户端发出，带有真实浏览器导入的完整 Cookie、来源页和常用浏览器请求头；每次只在随机时间窗内完成一次状态检查和一次签到提交。
 
-在服务器 `.env` 设置 `BROWSER_VNC_PASSWORD`，更新并启动容器，然后从自己的电脑建立 SSH 隧道：
+当前 Chrome 会话已经核实真实请求同时携带 `koa:sess`、`koa:sess.sig`、`gld:sess`、`gld:sess.sig` 四项。新版插件会按 `glados-facility.com` 域名枚举并保存这四项，而不只依赖两项 Cookie。服务端将其加密后作为一个 Cookie 请求头发送。
 
-```bash
-ssh -L 6080:127.0.0.1:6080 root@服务器地址
-```
-
-浏览器打开 `http://127.0.0.1:6080/vnc.html`，输入设置的 VNC 密码后，在远程桌面完成 GLaDOS 登录。回到后台点击“签到”验证页面点击模式；通过后再启用账号的定时任务。
-
-noVNC 端口仅绑定服务器的 `127.0.0.1`，不能从公网直接访问。每个档案同一时刻只启动一个浏览器；服务重启后会关闭浏览器进程，但登录状态保留在档案中。站点仍可能拒绝自动点击，遇到站点要求重新登录时需在远程桌面处理。
+站点仍可能依据服务器 IP、TLS 指纹或其他服务端规则拒绝 HTTP 请求；出现 `Automated check-in detected` 时，记录会保留原提示且不会自动重放 POST。重新登录并重新导入完整 Cookie 后再测试即可。
 
 签到接口使用站点域名作为 token（默认 `glados-facility.com`）。留空 `GLADOS_CHECKIN_TOKEN` 会跟随 `GLADOS_ORIGIN`；旧示例值 `glados.cloud` 自动迁移为当前域名，其他显式值保持不变。新版响应直接读取积分流水余额与本次奖励，兼容旧版积分查询接口。
 
@@ -102,14 +96,14 @@ noVNC 端口仅绑定服务器的 `127.0.0.1`，不能从公网直接访问。�
 
 旧账号自动升级数据库，保留固定时间；开始与结束相同表示固定时间。修改设置不会清除当天已入队标记，避免同一调度日重复提交。新账号表单默认时间段为 07:15–09:15。
 
-HTTP 模式运行时仅使用 Playwright 的 HTTP 请求客户端；浏览器页面点击模式会启动每个账号独立的可见 Chromium 档案。Docker 镜像中的浏览器也供 CI 的后台页面冒烟测试使用。
+运行时使用 Node 原生 `fetch`，没有 Playwright 或浏览器运行时依赖。
 
 1. 在后台点击“添加 Cookie”。
-2. 选择 `gld（当前站点）`，填入同一登录会话的 `gld:sess` 和 `gld:sess.sig` 的**值**，不要包含 Cookie 名称或整段请求头。
+2. 优先点击“一键读取浏览器 Cookie”，导入同一登录会话中的完整四项 Cookie。手动填写时，可填写同一登录会话的 `gld:sess` 和 `gld:sess.sig` 的值。
 3. 设置 Cookie 过期时间、每日签到时间、时区和该账号的 Webhook。
 4. 保存后可以点击“检测”或“签到”；Webhook 地址旁的“测试”按钮可单独验证推送。
 
-手动获取 Cookie：登录 `https://glados-facility.com/console/checkin`，按 F12，在 **Application / 应用 → Cookies** 中找到 `glados-facility.com` 下的两个值及过期时间。
+手动获取 Cookie：登录 `https://glados-facility.com/console/checkin`，按 F12，在 **Application / 应用 → Cookies** 中找到 `glados-facility.com` 下的四项值及过期时间。
 
 ### 浏览器插件导入
 
@@ -193,7 +187,7 @@ docker compose -f docker-compose.yml up -d --build
 
 访问 `http://127.0.0.1:3000`。Node.js 本机开发可运行 `npm ci`、`npm test`；直接 `npm start` 时，把 `.env` 中的 `DATABASE_PATH` 改为 `./data/glados.sqlite`。
 
-测试使用本地模拟接口和内存 SQLite，不读取真实账号或访问真实签到、Webhook 服务。`node test/browser.smoke.js` 额外验证浏览器流程，需要与 Playwright `1.55.0` 匹配的 Chromium；自动构建流程已在 Docker 镜像中执行此项。
+测试使用本地模拟接口和内存 SQLite，不读取真实账号或访问真实签到、Webhook 服务。
 
 ## 进阶配置
 
@@ -211,7 +205,7 @@ docker compose -f docker-compose.yml up -d --build
 | `WEBHOOK_TIMEOUT_MS` | `20000` | 单次推送及响应体读取超时 |
 | `WEBHOOK_ATTEMPTS` | `3` | 推送最大尝试次数，含首次 |
 
-毫秒参数单位均为 ms。Playwright 包和基础镜像固定为 `1.55.0`，升级时需要保持一致。
+毫秒参数单位均为 ms。
 
 ### 运行与备份
 

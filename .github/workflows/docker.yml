@@ -62,14 +62,6 @@ jobs:
             --mount "type=bind,src=$GITHUB_WORKSPACE/browser-extension,dst=/app/browser-extension,readonly" \
             "$IMAGE" npm test
 
-      - name: Verify browser and UI flows
-        env:
-          IMAGE: ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
-        run: |
-          docker run --rm --init \
-            --mount "type=bind,src=$GITHUB_WORKSPACE/test,dst=/app/test,readonly" \
-            "$IMAGE" node test/browser.smoke.js
-
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3

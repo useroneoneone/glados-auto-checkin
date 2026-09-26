@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs'
 import { config } from './config.js'
 import { db, accountPublic } from './db.js'
 import { encrypt } from './crypto.js'
-import { jobs, openBrowserLogin, queueLogin, queueCheckin, queueWebhookTest, startScheduler } from './automation.js'
+import { jobs, queueLogin, queueCheckin, queueWebhookTest, startScheduler } from './automation.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -38,7 +38,7 @@ const cookieNamespace = (value, fallback = 'koa') => {
 }
 const checkinMethod = (value, fallback = 'http') => {
   const method = text(value, fallback)
-  if (!['http', 'browser'].includes(method)) throw new Error('签到方式必须为 http 或 browser')
+  if (method !== 'http') throw new Error('当前版本仅支持轻量 HTTP 签到')
   return method
 }
 const dateOrNull = (value) => {
@@ -188,11 +188,6 @@ app.post('/api/accounts/:id/login', requireAuth, (req, res) => {
   if (!getAccount(accountId)) return res.status(404).json({ error: '账号不存在' })
   const job = queueLogin(accountId)
   res.status(202).json({ job: { id: job.id, status: job.status } })
-})
-app.post('/api/accounts/:id/browser/login', requireAuth, async (req, res) => {
-  const accountId = Number(req.params.id)
-  if (!getAccount(accountId)) return res.status(404).json({ error: '账号不存在' })
-  try { res.status(202).json({ session: await openBrowserLogin(accountId) }) } catch (error) { res.status(400).json({ error: error.message }) }
 })
 app.post('/api/accounts/:id/checkin', requireAuth, (req, res) => {
   const accountId = Number(req.params.id)

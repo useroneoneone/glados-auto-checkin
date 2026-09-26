@@ -151,24 +151,14 @@ test('failure messages containing checkin/today are not treated as success', () 
   assert.equal(counts.points, undefined)
 }))
 
-test('API cookie stores are independent between accounts', () => useClient('normal', async (first) => {
+test('cookie headers are independent between accounts', () => useClient('normal', async (first) => {
   const second = new GladosClient({ cookie_sess_enc: encrypt('other'), cookie_sess_sig_enc: encrypt('other-sig') })
   await second.open()
   try {
-    const firstCookies = (await first.api.storageState()).cookies
-    const secondCookies = (await second.api.storageState()).cookies
-    assert.equal(firstCookies.find((cookie) => cookie.name === 'koa:sess').value, 'fixture-session')
-    assert.equal(secondCookies.find((cookie) => cookie.name === 'koa:sess').value, 'other')
+    assert.match(first.cookie, /koa:sess=fixture-session/)
+    assert.match(second.cookie, /koa:sess=other/)
   } finally { await second.close() }
 }))
-
-test('partial browser startup is cleaned up even if no context exists', async () => {
-  const client = new GladosClient(account)
-  let closed = false
-  client.browser = { close: async () => { closed = true } }
-  await client.close()
-  assert.equal(closed, true)
-})
 
 test('legacy Cookie headers still work without launching a browser', async () => {
   mode = 'normal'

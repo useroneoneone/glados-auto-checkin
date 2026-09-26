@@ -1,4 +1,3 @@
-import { request } from 'playwright'
 import { config } from './config.js'
 import { decrypt } from './crypto.js'
 import { httpError, withRetry } from './retry.js'
@@ -26,105 +25,77 @@ function formatDecimal(value) {
   return String(value).replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '')
 }
 
-function parseCookieHeader(value) {
-  const origin = new URL(config.gladosOrigin)
-  const source = String(value || '').replace(/^cookie:\s*/i, '')
-  const expiresAt = Date.parse(this?.account?.cookie_expires_at || '')
-  return source.split(';')
+function cookieHeader(value) {
+  return String(value || '').replace(/^cookie:\s*/i, '').split(';')
     .map((part) => part.trim())
     .filter(Boolean)
     .map((part) => {
       const index = part.indexOf('=')
       if (index < 1) return null
       const name = part.slice(0, index).trim()
-      if (COOKIE_ATTRIBUTE_NAMES.has(name.toLowerCase())) return null
-      return {
-        name,
-        value: part.slice(index + 1).trim(),
-        domain: origin.hostname,
-        path: '/',
-        secure: origin.protocol === 'https:',
-        httpOnly: false,
-        sameSite: 'Lax',
-        expires: Number.isFinite(expiresAt) ? Math.floor(expiresAt / 1000) : -1,
-      }
+      const cookieValue = part.slice(index + 1).trim()
+      if (COOKIE_ATTRIBUTE_NAMES.has(name.toLowerCase()) || !cookieValue) return null
+      return `${name}=${cookieValue}`
     })
     .filter(Boolean)
+    .join('; ')
 }
 
-function splitSessionCookies(account) {
-  if (!account.cookie_sess_enc || !account.cookie_sess_sig_enc) return []
-  const origin = new URL(config.gladosOrigin)
-  const expiresAt = Date.parse(account.cookie_expires_at || '')
+function sessionCookieHeader(account) {
+  if (!account.cookie_sess_enc || !account.cookie_sess_sig_enc) return ''
   const prefix = account.cookie_namespace === 'gld' ? 'gld' : 'koa'
-  const common = {
-    domain: origin.hostname,
-    path: '/',
-    secure: origin.protocol === 'https:',
-    httpOnly: true,
-    sameSite: 'Lax',
-    expires: Number.isFinite(expiresAt) ? Math.floor(expiresAt / 1000) : -1,
-  }
-  return [
-    { ...common, name: `${prefix}:sess`, value: decrypt(account.cookie_sess_enc) },
-    { ...common, name: `${prefix}:sess.sig`, value: decrypt(account.cookie_sess_sig_enc) },
-  ].filter((cookie) => cookie.value)
+  return `${prefix}:sess=${decrypt(account.cookie_sess_enc)}; ${prefix}:sess.sig=${decrypt(account.cookie_sess_sig_enc)}`
 }
 
 function decryptCookieHeader(account) {
-  if (!account.cookie_enc) return []
-  const cookieHeader = decrypt(account.cookie_enc)
-  const cookies = parseCookieHeader.call({ account }, cookieHeader)
-  if (!cookies.length) throw new Error('Cookie 格式无效，请用新版插件重新读取完整浏览器 Cookie')
-  return cookies
+  if (!account.cookie_enc) return ''
+  const value = cookieHeader(decrypt(account.cookie_enc))
+  if (!value) throw new Error('Cookie 格式无效，请用新版插件重新读取完整浏览器 Cookie')
+  return value
 }
 
 export class GladosClient {
   constructor(account) {
     this.account = account
+    this.cookie = ''
     this.browser = null
-    this.api = null
-    this.context = null
-    this.page = null
   }
 
   async open() {
-    const options = {
-      timeout: config.requestTimeoutMs,
-      extraHTTPHeaders: { Accept: 'application/json', Referer: CHECKIN_URL, Origin: config.gladosOrigin },
-      userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.16 Safari/537.36',
-    }
-    if (!this.account.cookie_enc && !this.account.cookie_sess_enc && this.account.storage_state_enc) {
-      try { options.storageState = JSON.parse(decrypt(this.account.storage_state_enc)) } catch { /* stale state */ }
-    }
-    const fullCookieHeader = decryptCookieHeader(this.account)
-    const sessionCookies = splitSessionCookies(this.account)
-    if (fullCookieHeader.length) {
-      options.storageState = { cookies: fullCookieHeader, origins: [] }
-    } else if (sessionCookies.length === 2) {
-      options.storageState = { cookies: sessionCookies, origins: [] }
-    }
-    this.api = await request.newContext(options)
+    this.cookie = decryptCookieHeader(this.account) || sessionCookieHeader(this.account)
+    if (!this.cookie) throw new Error('未保存完整 Cookie，请用新版插件重新读取')
   }
 
   async requestJson(path, { method = 'GET', data } = {}) {
     const operation = async () => {
-      const response = await this.api.fetch(`${config.gladosOrigin}${path}`, {
-        method, data, timeout: config.requestTimeoutMs, maxRetries: 0,
+      const response = await fetch(`${config.gladosOrigin}${path}`, {
+        method,
+        redirect: 'manual',
+        signal: AbortSignal.timeout(config.requestTimeoutMs),
+        headers: {
+          Accept: 'application/json, text/plain, */*',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+          Origin: config.gladosOrigin,
+          Referer: CHECKIN_URL,
+          'Sec-Fetch-Dest': 'empty',
+          'Sec-Fetch-Mode': 'cors',
+          'Sec-Fetch-Site': 'same-origin',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+          Cookie: this.cookie,
+          ...(data === undefined ? {} : { 'Content-Type': 'application/json' }),
+        },
+        body: data === undefined ? undefined : JSON.stringify(data),
       })
-      try {
-        const status = response.status()
-        if (method === 'GET' && (status === 408 || status === 429 || status >= 500)) {
-          throw httpError(path, status, response.headers()['retry-after'])
-        }
-        if (!response.ok()) return { ok: false, status, payload: null }
-        const payload = await response.json().catch(() => { throw new Error(`${path} 返回的不是有效 JSON，请检查服务器网络或站点验证页面`) })
-        return { ok: true, status, payload }
-      } finally {
-        await response.dispose()
+      const status = response.status
+      if (method === 'GET' && (status === 408 || status === 429 || status >= 500)) {
+        throw httpError(path, status, response.headers.get('retry-after'))
       }
+      if (!response.ok) return { ok: false, status, payload: null }
+      const payload = await response.json().catch(() => { throw new Error(`${path} 返回的不是有效 JSON，请检查服务器网络或站点验证页面`) })
+      return { ok: true, status, payload }
     }
-    // A timed-out POST may already have succeeded remotely. Never replay it automatically.
     return method === 'GET'
       ? withRetry(operation, { attempts: config.requestAttempts, delayMs: config.retryDelayMs })
       : operation()
@@ -138,7 +109,7 @@ export class GladosClient {
     const data = json?.data || json
     const loggedIn = (json?.code == null || Number(json.code) === 0)
       && Boolean(data?.email || data?.isLogin === true || data?.loggedIn === true || data?.user || data?.username)
-    return { loggedIn, data, message: loggedIn ? '' : '登录态无效，请用新版插件重新读取 gld:sess 和 gld:sess.sig；旧 koa Cookie 已不适用于当前站点' }
+    return { loggedIn, data, message: loggedIn ? '' : '登录态无效，请用新版插件重新读取完整 Cookie（koa:sess、koa:sess.sig、gld:sess、gld:sess.sig）' }
   }
 
   async checkin() {
@@ -148,25 +119,16 @@ export class GladosClient {
     if (!status.loggedIn) return { status: 'login_required', message: status.message || '登录状态已失效，请重新读取 Cookie' }
     let response
     try {
-      response = await this.requestJson('/api/user/checkin', {
-        method: 'POST', data: { token: config.gladosCheckinToken },
-      })
+      response = await this.requestJson('/api/user/checkin', { method: 'POST', data: { token: config.gladosCheckinToken } })
     } catch (error) {
-      return {
-        status: 'failed', outcomeUnknown: true,
-        message: `签到结果待确认，未自动重复提交，请稍后核实签到历史：${safeErrorMessage(error)}`,
-      }
+      return { status: 'failed', outcomeUnknown: true, message: `签到结果待确认，未自动重复提交，请稍后核实签到历史：${safeErrorMessage(error)}` }
     }
     if (response.status === 401) return { status: 'login_required', message: '登录状态已失效' }
     if (!response.ok) throw httpError('签到', response.status)
     const payload = response.payload
     const message = checkinMessage(payload)
     if (/automated check-in detected/i.test(message)) {
-      return {
-        status: 'login_required', reason: 'automated_checkin_detected',
-        message: `站点拒绝了自动签到，请在官网重新登录并更新 Cookie。登录检测通过不代表允许签到。此次未重复提交。站点提示：${message}`,
-        raw: payload,
-      }
+      return { status: 'login_required', reason: 'automated_checkin_detected', message: `站点拒绝了自动签到，请在官网重新登录并更新 Cookie。登录检测通过不代表允许签到。此次未重复提交。站点提示：${message}`, raw: payload }
     }
     const result = summarizeCheckin(payload)
     const state = result.already ? 'already_signed' : (result.success ? 'success' : 'failed')
@@ -176,9 +138,9 @@ export class GladosClient {
     let pointsWarning = ''
     if (state !== 'failed' && latest?.balance == null) {
       try {
-        const response = await this.requestJson('/api/user/points')
-        if (!response.ok) throw httpError('积分查询', response.status)
-        points = response.payload?.data || response.payload || {}
+        const pointsResponse = await this.requestJson('/api/user/points')
+        if (!pointsResponse.ok) throw httpError('积分查询', pointsResponse.status)
+        points = pointsResponse.payload?.data || pointsResponse.payload || {}
       } catch (error) {
         pointsWarning = `；积分查询暂时失败（不影响签到结果）：${safeErrorMessage(error)}`
       }
@@ -195,10 +157,5 @@ export class GladosClient {
     }
   }
 
-  async close() {
-    await this.context?.close().catch(() => {})
-    await this.browser?.close().catch(() => {})
-    await this.api?.dispose().catch(() => {})
-    this.page = this.context = this.browser = this.api = null
-  }
+  async close() { this.cookie = '' }
 }

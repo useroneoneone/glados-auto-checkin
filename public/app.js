@@ -178,7 +178,7 @@ function accountModal() {
   const item = state.editing || {}
   return `<div class="modal"><section class="modal-card">
     <div class="modal-head"><h2>${item.id ? '编辑 Cookie' : '添加 Cookie'}</h2>
-      <div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.5.0.zip" download="glados-cookie-helper-v1.5.0.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载读取 Cookie 插件</a>
+      <div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.6.0.zip" download="glados-cookie-helper-v1.6.0.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载读取 Cookie 插件</a>
       <button type="button" class="btn btn-import" data-import-browser-cookie title="从当前浏览器的 GLaDOS 登录状态读取 Cookie">一键读取浏览器 Cookie</button></div>
     </div>
     <form id="account-form" class="form-grid">
@@ -223,7 +223,7 @@ function bindActions() {
     button.textContent = '正在读取...'
     try {
       const data = await readBrowserCookie()
-      if (!data.cookieHeader) throw new Error('读取插件版本过旧，请下载并更新到 1.5.0 后重试')
+      if (!data.cookieHeader) throw new Error('读取插件版本过旧，请下载并更新到 1.6.0 后重试')
       if (data.cookieHeader) {
         let hidden = form.elements.cookieHeader
         if (!hidden) {

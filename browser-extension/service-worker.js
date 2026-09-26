@@ -1,4 +1,5 @@
 const GLADOS_ORIGIN = 'https://glados-facility.com'
+const REQUIRED_COOKIE_NAMES = ['koa:sess', 'koa:sess.sig', 'gld:sess', 'gld:sess.sig']
 const CONSOLE_ORIGINS = new Set([
   'http://127.0.0.1:3000',
   'http://localhost:3000',
@@ -93,14 +94,22 @@ async function statusFromOpenTab() {
 
 async function readGladosSession() {
   const hostname = new URL(GLADOS_ORIGIN).hostname
-  const allCookies = await chrome.cookies.getAll({ domain: hostname })
-  const byName = new Map(allCookies
-    .filter((cookie) => cookie.domain.replace(/^\./, '') === hostname && cookie.path === '/')
-    .map((cookie) => [cookie.name, cookie]))
-  const modern = byName.get('gld:sess')
-  const modernSig = byName.get('gld:sess.sig')
-  const legacy = byName.get('koa:sess')
-  const legacySig = byName.get('koa:sess.sig')
+  // Reading exact cookies by URL is reliable for host-only and HttpOnly cookies.
+  // Keep a name-only fallback for Chrome profiles that return an incomplete result.
+  const directCookies = await Promise.all(REQUIRED_COOKIE_NAMES.map((name) => (
+    chrome.cookies.get({ url: GLADOS_ORIGIN, name })
+  )))
+  let resolvedCookies = directCookies
+  if (directCookies.some((cookie) => !cookie)) {
+    const allCookies = await chrome.cookies.getAll({ domain: hostname })
+    resolvedCookies = REQUIRED_COOKIE_NAMES.map((name, index) => (
+      directCookies[index]
+      || allCookies.find((cookie) => cookie.name === name && cookie.path === '/')
+      || allCookies.find((cookie) => cookie.name === name)
+      || null
+    ))
+  }
+  const [legacy, legacySig, modern, modernSig] = resolvedCookies
   const requiredCookies = [legacy, legacySig, modern, modernSig]
   if (requiredCookies.some((cookie) => !cookie)) throw new Error('当前浏览器没有找到完整的四项 GLaDOS Cookie，请重新登录后重试')
 

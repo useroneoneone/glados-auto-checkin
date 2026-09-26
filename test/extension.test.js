@@ -4,12 +4,18 @@ import vm from 'node:vm'
 import { readFileSync } from 'node:fs'
 
 const source = readFileSync(new URL('../browser-extension/service-worker.js', import.meta.url), 'utf8')
-function readSession(cookies) {
+function readSession(cookies, { directRead = true } = {}) {
+  const materializedCookies = Object.entries(cookies).map(([name, value]) => ({
+    name, domain: 'glados-facility.com', path: '/', ...value,
+  }))
   const context = vm.createContext({
     URL, TextDecoder, Uint8Array, atob,
     fetch: async () => ({ ok: true, json: async () => ({ email: 'fixture@example.test' }) }),
     chrome: {
-      cookies: { getAll: async () => Object.entries(cookies).map(([name, value]) => ({ name, domain: 'glados-facility.com', path: '/', ...value })) },
+      cookies: {
+        get: async ({ name }) => directRead ? materializedCookies.find((cookie) => cookie.name === name) || null : null,
+        getAll: async () => materializedCookies,
+      },
       runtime: { onMessage: { addListener() {} } },
       permissions: { onRemoved: { addListener() {} } },
     },
@@ -29,6 +35,16 @@ test('extension imports all four current browser cookies and uses earliest expir
   assert.equal(result.cookieHeader, 'koa:sess=old-session; koa:sess.sig=old-signature; gld:sess=new-session; gld:sess.sig=new-signature')
   assert.deepEqual([...result.cookieNames], ['koa:sess', 'koa:sess.sig', 'gld:sess', 'gld:sess.sig'])
   assert.equal(result.cookieExpiresAt, new Date(1900000000000).toISOString())
+})
+
+test('extension falls back to a name lookup when direct Chrome cookie reads are incomplete', async () => {
+  const result = await readSession({
+    'gld:sess': cookie('new-session', 2000000000),
+    'gld:sess.sig': cookie('new-signature', 1900000000),
+    'koa:sess': cookie('old-session', 2100000000),
+    'koa:sess.sig': cookie('old-signature', 2100000000),
+  }, { directRead: false })
+  assert.equal(result.cookieHeader, 'koa:sess=old-session; koa:sess.sig=old-signature; gld:sess=new-session; gld:sess.sig=new-signature')
 })
 
 test('extension rejects any incomplete four-cookie session', async () => {

@@ -107,7 +107,7 @@ docker compose -f docker-compose.prod.yml up -d
 
 ### 浏览器插件导入
 
-1. 在账号窗口点击“下载读取 Cookie 插件”，下载 1.5.0 并解压 ZIP。
+1. 在账号窗口点击“下载读取 Cookie 插件”，下载 1.6.0 并解压 ZIP。
 2. 打开 `chrome://extensions/` 或 `edge://extensions/`，开启开发者模式，加载解压后的文件夹。
 3. 在同一浏览器中登录 GLaDOS，再打开签到管理后台。
 4. 点击插件图标，选择“永久授权当前网站”，随后回到后台点击“一键读取浏览器 Cookie”。

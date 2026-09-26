@@ -19,28 +19,24 @@ function readSession(cookies) {
 }
 const cookie = (value, expirationDate) => ({ value, expirationDate })
 
-test('extension prefers a complete gld pair over stale koa and uses earliest expiry', async () => {
+test('extension imports all four current browser cookies and uses earliest expiry', async () => {
   const result = await readSession({
     'gld:sess': cookie('new-session', 2000000000),
     'gld:sess.sig': cookie('new-signature', 1900000000),
     'koa:sess': cookie('old-session', 2100000000),
     'koa:sess.sig': cookie('old-signature', 2100000000),
   })
-  assert.equal(result.cookieNamespace, 'gld')
-  assert.equal(result.sess, 'new-session')
-  assert.equal(result.sessSig, 'new-signature')
   assert.equal(result.cookieHeader, 'koa:sess=old-session; koa:sess.sig=old-signature; gld:sess=new-session; gld:sess.sig=new-signature')
   assert.deepEqual([...result.cookieNames], ['koa:sess', 'koa:sess.sig', 'gld:sess', 'gld:sess.sig'])
   assert.equal(result.cookieExpiresAt, new Date(1900000000000).toISOString())
 })
 
-test('extension never combines a partial gld session with legacy cookies', async () => {
+test('extension rejects any incomplete four-cookie session', async () => {
   await assert.rejects(readSession({
     'gld:sess': cookie('new'), 'koa:sess': cookie('old'), 'koa:sess.sig': cookie('old-signature'),
-  }), /重新登录/)
+  }), /四项/)
 })
 
-test('legacy-only session is explicitly marked koa', async () => {
-  const result = await readSession({ 'koa:sess': cookie('old'), 'koa:sess.sig': cookie('sig') })
-  assert.equal(result.cookieNamespace, 'koa')
+test('extension rejects the legacy-only pair', async () => {
+  await assert.rejects(readSession({ 'koa:sess': cookie('old'), 'koa:sess.sig': cookie('sig') }), /四项/)
 })

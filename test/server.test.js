@@ -77,7 +77,11 @@ test('authenticated HTTP jobs deduplicate and webhook tests return 202', { timeo
     const ids = []
     for (let i = 0; i < 2; i += 1) {
       const { response, data } = await api('/api/accounts', {
-        method: 'POST', body: { label: `Fixture ${i}`, sess: `fixture-${i}`, sessSig: `fixture-sig-${i}`, enabled: false },
+        method: 'POST', body: {
+          label: `Fixture ${i}`,
+          koaSess: `koa-${i}`, koaSessSig: `koa-sig-${i}`,
+          gldSess: `gld-${i}`, gldSessSig: `gld-sig-${i}`, enabled: false,
+        },
       })
       assert.equal(response.status, 201)
       assert.equal(data.account.cookieWarningDays, 3)
@@ -88,21 +92,25 @@ test('authenticated HTTP jobs deduplicate and webhook tests return 202', { timeo
       method: 'POST', body: { label: 'Browser fixture', checkinMethod: 'browser', enabled: false },
     })
     assert.equal(browserAccount.response.status, 400)
+    const fullCookieAccount = await api('/api/accounts', {
+      method: 'POST', body: {
+        label: 'Four Cookie fixture',
+        koaSess: 'koa-session', koaSessSig: 'koa-signature',
+        gldSess: 'gld-session', gldSessSig: 'gld-signature', enabled: false,
+      },
+    })
+    assert.equal(fullCookieAccount.response.status, 201)
+    assert.equal(fullCookieAccount.data.account.hasFullCookie, true)
+    const partialCookieAccount = await api('/api/accounts', {
+      method: 'POST', body: { label: 'Partial four Cookie fixture', koaSess: 'koa-session', enabled: false },
+    })
+    assert.equal(partialCookieAccount.response.status, 400)
     const settings = await api(`/api/accounts/${ids[0]}`, {
       method: 'PUT', body: { cookieWarningDays: 7, cookieWarningEnabled: false },
     })
     assert.equal(settings.data.account.cookieWarningDays, 7)
     assert.equal(settings.data.account.cookieWarningEnabled, false)
     assert.equal(settings.data.account.enabled, false)
-    assert.equal(settings.data.account.cookieNamespace, 'koa')
-    assert.equal((await api(`/api/accounts/${ids[0]}`, { method: 'PUT', body: { cookieNamespace: 'gld' } })).response.status, 400)
-    assert.equal((await api(`/api/accounts/${ids[0]}`, { method: 'PUT', body: { cookieNamespace: 'bad' } })).response.status, 400)
-    assert.equal((await api(`/api/accounts/${ids[0]}`, { method: 'PUT', body: { sess: 'partial' } })).response.status, 400)
-    const migrated = await api(`/api/accounts/${ids[0]}`, { method: 'PUT', body: {
-      cookieNamespace: 'gld', sess: 'new-session', sessSig: 'new-signature',
-    } })
-    assert.equal(migrated.response.status, 200)
-    assert.equal(migrated.data.account.cookieNamespace, 'gld')
     const window = await api(`/api/accounts/${ids[0]}`, {
       method: 'PUT', body: { scheduleTime: '23:00', scheduleEndTime: '01:00', scheduleTimezone: 'UTC' },
     })

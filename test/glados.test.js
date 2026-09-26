@@ -58,7 +58,7 @@ process.env.RETRY_DELAY_MS = '0'
 process.env.APP_SECRET = 'fixture-only'
 const { GladosClient } = await import('../src/glados.js')
 const { encrypt } = await import('../src/crypto.js')
-const account = { cookie_sess_enc: encrypt('fixture-session'), cookie_sess_sig_enc: encrypt('fixture-signature') }
+const account = { cookie_format_version: 4, cookie_enc: encrypt('koa:sess=fixture-koa; koa:sess.sig=fixture-koa-signature; gld:sess=fixture-gld; gld:sess.sig=fixture-gld-signature') }
 after(() => { server.closeAllConnections(); server.close() })
 
 async function useClient(selectedMode, operation) {
@@ -79,7 +79,7 @@ test('normal check-in uses isolated cookies, no browser, and normalized points',
   assert.equal(result.pointsChange, '6')
   assert.equal(client.browser, null)
   assert.deepEqual(counts, { status: 1, checkin: 1, points: 1 })
-  assert.ok(receivedCookies.every((cookie) => cookie.includes('koa:sess=fixture-session') && cookie.includes('koa:sess.sig=fixture-signature')))
+  assert.ok(receivedCookies.every((cookie) => cookie.includes('koa:sess=fixture-koa') && cookie.includes('koa:sess.sig=fixture-koa-signature') && cookie.includes('gld:sess=fixture-gld') && cookie.includes('gld:sess.sig=fixture-gld-signature')))
 }))
 
 test('current API sends origin hostname token and reads returned ledger without extra requests', () => useClient('modern', async (client) => {
@@ -152,24 +152,17 @@ test('failure messages containing checkin/today are not treated as success', () 
 }))
 
 test('cookie headers are independent between accounts', () => useClient('normal', async (first) => {
-  const second = new GladosClient({ cookie_sess_enc: encrypt('other'), cookie_sess_sig_enc: encrypt('other-sig') })
+  const second = new GladosClient({ cookie_format_version: 4, cookie_enc: encrypt('koa:sess=other-koa; koa:sess.sig=other-koa-sig; gld:sess=other-gld; gld:sess.sig=other-gld-sig') })
   await second.open()
   try {
-    assert.match(first.cookie, /koa:sess=fixture-session/)
-    assert.match(second.cookie, /koa:sess=other/)
+    assert.match(first.cookie, /koa:sess=fixture-koa/)
+    assert.match(second.cookie, /koa:sess=other-koa/)
   } finally { await second.close() }
 }))
 
-test('legacy Cookie headers still work without launching a browser', async () => {
-  mode = 'normal'
-  receivedCookies = []
-  const client = new GladosClient({ cookie_enc: encrypt('Cookie: koa:sess=legacy; koa:sess.sig=legacy-sig; Path=/; HttpOnly') })
-  try {
-    await client.open()
-    assert.equal((await client.status()).loggedIn, true)
-    assert.match(receivedCookies[0], /koa:sess=legacy/)
-    assert.doesNotMatch(receivedCookies[0], /Path|HttpOnly/)
-  } finally { await client.close() }
+test('incomplete Cookie headers are rejected before requests', async () => {
+  const client = new GladosClient({ cookie_format_version: 4, cookie_enc: encrypt('Cookie: koa:sess=legacy; koa:sess.sig=legacy-sig; Path=/; HttpOnly') })
+  await assert.rejects(client.open(), /完整四项/)
 })
 
 test('expired cookies skip requests entirely', async () => {
@@ -179,24 +172,12 @@ test('expired cookies skip requests entirely', async () => {
   assert.deepEqual(counts, {})
 })
 
-test('gld cookie namespace is sent unchanged and never relabeled as koa', async () => {
-  mode = 'modern'
-  counts = {}
-  receivedCookies = []
-  const client = new GladosClient({ ...account, cookie_namespace: 'gld' })
-  try {
-    await client.open()
-    assert.equal((await client.checkin()).status, 'success')
-    assert.ok(receivedCookies.every(value => value.includes('gld:sess=fixture-session') && value.includes('gld:sess.sig=fixture-signature') && !value.includes('koa:')))
-  } finally { await client.close() }
-})
-
 test('complete browser cookie header sends koa and gld session cookies together', async () => {
   mode = 'modern'
   counts = {}
   receivedCookies = []
   const cookieHeader = 'koa:sess=old-session; koa:sess.sig=old-signature; gld:sess=modern-session; gld:sess.sig=modern-signature'
-  const client = new GladosClient({ ...account, cookie_namespace: 'gld', cookie_enc: encrypt(cookieHeader) })
+  const client = new GladosClient({ ...account, cookie_enc: encrypt(cookieHeader) })
   try {
     await client.open()
     assert.equal((await client.checkin()).status, 'success')

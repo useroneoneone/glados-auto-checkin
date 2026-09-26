@@ -101,13 +101,11 @@ async function readGladosSession() {
   const modernSig = byName.get('gld:sess.sig')
   const legacy = byName.get('koa:sess')
   const legacySig = byName.get('koa:sess.sig')
-  // Never mix namespaces or fall back to stale koa cookies when gld is partial.
-  const cookieNamespace = modern || modernSig ? 'gld' : 'koa'
-  const [sess, sessSig] = cookieNamespace === 'gld' ? [modern, modernSig] : [legacy, legacySig]
-  if (!sess || !sessSig) throw new Error('当前浏览器没有找到完整的 GLaDOS 登录 Cookie，请重新登录 GLaDOS 后读取 gld:sess 和 gld:sess.sig')
+  const requiredCookies = [legacy, legacySig, modern, modernSig]
+  if (requiredCookies.some((cookie) => !cookie)) throw new Error('当前浏览器没有找到完整的四项 GLaDOS Cookie，请重新登录后重试')
 
-  const sessionData = decodeSession(sess.value)
-  const expirations = [sess.expirationDate, sessSig.expirationDate].filter(value => Number.isFinite(value) && value > 0)
+  const sessionData = decodeSession(modern.value)
+  const expirations = requiredCookies.map((cookie) => cookie.expirationDate).filter(value => Number.isFinite(value) && value > 0)
   const expirySeconds = expirations.length ? Math.min(...expirations) : null
   const expiryMs = expirySeconds ? expirySeconds * 1000 : Number(sessionData._expire || 0)
   const status = await statusFromExtensionRequest() || await statusFromOpenTab() || {}
@@ -122,9 +120,6 @@ async function readGladosSession() {
   const cookieHeader = cookieParts.join('; ')
 
   return {
-    cookieNamespace,
-    sess: sess.value,
-    sessSig: sessSig.value,
     cookieHeader,
     cookieNames: cookieParts.map((part) => part.slice(0, part.indexOf('='))),
     username: status.username || status.email || fallbackName,

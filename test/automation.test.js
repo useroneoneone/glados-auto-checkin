@@ -54,10 +54,10 @@ beforeEach(() => {
 
 function addAccount(id, webhook = false) {
   db.prepare(`INSERT INTO accounts
-    (id, label, email, imap_host, imap_user, imap_password_enc, cookie_sess_enc, cookie_sess_sig_enc,
+    (id, label, email, imap_host, imap_user, imap_password_enc, cookie_enc, cookie_format_version,
       schedule_time, schedule_timezone, webhook_url, created_at, updated_at)
-    VALUES (?, ?, '', '', '', '', ?, ?, '12:34', 'UTC', ?, ?, ?)`)
-    .run(id, `Fixture ${id}`, encrypt(`fixture-${id}`), encrypt(`sig-${id}`),
+    VALUES (?, ?, '', '', '', '', ?, 4, '12:34', 'UTC', ?, ?, ?)`)
+    .run(id, `Fixture ${id}`, encrypt(`koa:sess=koa-${id}; koa:sess.sig=koa-sig-${id}; gld:sess=gld-${id}; gld:sess.sig=gld-sig-${id}`),
       webhook ? `${process.env.GLADOS_ORIGIN}/hook` : null, new Date().toISOString(), new Date().toISOString())
 }
 

@@ -71,6 +71,7 @@ if (!accountColumns.includes('cookie_sess_enc')) db.prepare('ALTER TABLE account
 if (!accountColumns.includes('cookie_sess_sig_enc')) db.prepare('ALTER TABLE accounts ADD COLUMN cookie_sess_sig_enc TEXT').run()
 if (!accountColumns.includes('cookie_namespace')) db.exec("ALTER TABLE accounts ADD COLUMN cookie_namespace TEXT NOT NULL DEFAULT 'koa'")
 if (!accountColumns.includes('checkin_method')) db.exec("ALTER TABLE accounts ADD COLUMN checkin_method TEXT NOT NULL DEFAULT 'http'")
+if (!accountColumns.includes('cookie_format_version')) db.exec('ALTER TABLE accounts ADD COLUMN cookie_format_version INTEGER NOT NULL DEFAULT 0')
 db.prepare("UPDATE accounts SET checkin_method = 'http' WHERE checkin_method <> 'http'").run()
 if (!accountColumns.includes('schedule_time')) db.prepare("ALTER TABLE accounts ADD COLUMN schedule_time TEXT NOT NULL DEFAULT '07:15'").run()
 if (!accountColumns.includes('schedule_timezone')) db.prepare("ALTER TABLE accounts ADD COLUMN schedule_timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai'").run()
@@ -106,11 +107,8 @@ export function accountPublic(row) {
     imapSecure: Boolean(row.imap_secure),
     imapUser: row.imap_user,
     webhookUrl: row.webhook_url || '',
-    hasCookie: Boolean((row.cookie_sess_enc && row.cookie_sess_sig_enc) || row.cookie_enc),
-    hasFullCookie: Boolean(row.cookie_enc),
-    hasCookieSess: Boolean(row.cookie_sess_enc),
-    hasCookieSessSig: Boolean(row.cookie_sess_sig_enc),
-    cookieNamespace: row.cookie_namespace || 'koa',
+    hasCookie: Number(row.cookie_format_version) === 4 && Boolean(row.cookie_enc),
+    hasFullCookie: Number(row.cookie_format_version) === 4 && Boolean(row.cookie_enc),
     checkinMethod: row.checkin_method || 'http',
     cookieExpiresAt: row.cookie_expires_at,
     cookieWarningEnabled: Boolean(row.cookie_warning_enabled),

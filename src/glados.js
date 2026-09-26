@@ -5,6 +5,7 @@ import { safeErrorMessage } from './errors.js'
 
 const CHECKIN_URL = `${config.gladosOrigin}/console/checkin`
 const COOKIE_ATTRIBUTE_NAMES = new Set(['path', 'domain', 'expires', 'max-age', 'secure', 'httponly', 'samesite', 'priority'])
+const REQUIRED_COOKIE_NAMES = ['koa:sess', 'koa:sess.sig', 'gld:sess', 'gld:sess.sig']
 
 function checkinMessage(payload) {
   return String(payload?.message || payload?.msg || payload?.data?.message || '')
@@ -41,16 +42,12 @@ function cookieHeader(value) {
     .join('; ')
 }
 
-function sessionCookieHeader(account) {
-  if (!account.cookie_sess_enc || !account.cookie_sess_sig_enc) return ''
-  const prefix = account.cookie_namespace === 'gld' ? 'gld' : 'koa'
-  return `${prefix}:sess=${decrypt(account.cookie_sess_enc)}; ${prefix}:sess.sig=${decrypt(account.cookie_sess_sig_enc)}`
-}
-
 function decryptCookieHeader(account) {
   if (!account.cookie_enc) return ''
   const value = cookieHeader(decrypt(account.cookie_enc))
-  if (!value) throw new Error('Cookie 格式无效，请用新版插件重新读取完整浏览器 Cookie')
+  const names = new Set(value.split(';').map((part) => part.trim().split('=', 1)[0]))
+  const missing = REQUIRED_COOKIE_NAMES.filter((name) => !names.has(name))
+  if (!value || missing.length) throw new Error(`Cookie 格式无效，请重新读取完整四项 Cookie${missing.length ? `：${missing.join('、')}` : ''}`)
   return value
 }
 
@@ -62,7 +59,8 @@ export class GladosClient {
   }
 
   async open() {
-    this.cookie = decryptCookieHeader(this.account) || sessionCookieHeader(this.account)
+    if (Number(this.account.cookie_format_version) !== 4) throw new Error('Cookie 格式已升级，请重新导入完整的四项浏览器 Cookie')
+    this.cookie = decryptCookieHeader(this.account)
     if (!this.cookie) throw new Error('未保存完整 Cookie，请用新版插件重新读取')
   }
 

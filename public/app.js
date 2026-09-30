@@ -37,9 +37,10 @@ async function api(url, options = {}) {
 function toast(message) {
   const node = document.createElement('div')
   node.className = 'toast'
+  node.setAttribute('role', 'status')
   node.textContent = message
   document.body.append(node)
-  setTimeout(() => node.remove(), 2800)
+  setTimeout(() => node.remove(), 6000)
 }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 function jobLabel(job) {
@@ -118,7 +119,7 @@ async function runJob(url, accountId, label) {
   }
 }
 function renderLogin(error = '') {
-  app.innerHTML = `<main class="login-screen"><section class="login-card"><div class="brand"><div class="brand-mark">G</div><span>GLaDOS Console</span></div><h1>自动签到控制台</h1><p>使用 Cookie 管理多账号签到与 Webhook 推送。</p>${error ? `<div class="notice">${esc(error)}</div>` : ''}<form id="login-form"><div class="field"><label>管理员账号</label><input name="username" autocomplete="username" required /></div><div class="field"><label>管理员密码</label><input name="password" type="password" autocomplete="current-password" required /></div><button class="btn btn-primary" style="width:100%">登录后台</button></form></section></main>`
+  app.innerHTML = `<main class="login-screen"><section class="login-card"><div class="brand"><div class="brand-mark">G</div><span>GLaDOS Console</span></div><h1>自动签到控制台</h1><p>管理多个 GLaDOS 账号的定时签到与结果通知。</p>${error ? `<div class="notice">${esc(error)}</div>` : ''}<form id="login-form"><div class="field"><label for="login-user">管理员账号</label><input id="login-user" name="username" autocomplete="username" required /></div><div class="field"><label for="login-password">管理员密码</label><input id="login-password" name="password" type="password" autocomplete="current-password" required /></div><button class="btn btn-primary" style="width:100%">登录后台</button></form></section></main>`
   document.querySelector('#login-form').addEventListener('submit', async (event) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -136,18 +137,49 @@ async function loadData() {
   state.checkins = checkins.checkins
 }
 function renderShell() {
+  const focusKey = document.activeElement?.dataset
   const success = state.checkins.filter((item) => item.status === 'success' || item.status === 'already_signed').length
   const active = state.accounts.filter((item) => item.enabled).length
-  app.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">G</div><span>GLaDOS Console</span></div><nav class="nav"><button data-view="overview" class="${state.view === 'overview' ? 'active' : ''}">总览</button><button data-view="accounts" class="${state.view === 'accounts' ? 'active' : ''}">Cookie 管理</button><button data-view="history" class="${state.view === 'history' ? 'active' : ''}">签到历史</button></nav><div class="sidebar-foot">每个账号可独立设置<br/>随机入队开始时间与时区</div></aside><main class="main"><header class="topbar"><h1>${state.view === 'overview' ? '今天的运行状态' : state.view === 'accounts' ? 'Cookie 管理' : '签到历史'}</h1><button id="logout" class="btn btn-ghost">退出登录</button></header><section class="content">${state.view === 'overview' ? overview(success, active) : state.view === 'accounts' ? accountsView() : historyView()}</section></main></div>${state.modal ? accountModal() : ''}`
+  app.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">G</div><span>GLaDOS Console</span></div><nav class="nav"><button data-view="overview" class="${state.view === 'overview' ? 'active' : ''}">总览</button><button data-view="accounts" class="${state.view === 'accounts' ? 'active' : ''}">账号管理</button><button data-view="history" class="${state.view === 'history' ? 'active' : ''}">签到历史</button></nav><div class="sidebar-foot">每个账号可独立设置<br/>随机入队开始时间与时区</div></aside><main class="main"><header class="topbar"><h1>${state.view === 'overview' ? '运行总览' : state.view === 'accounts' ? '账号管理' : '签到历史'}</h1><div class="topbar-actions"><button class="btn btn-ghost" data-refresh>刷新数据</button><button id="logout" class="btn btn-ghost">退出登录</button></div></header><section class="content">${state.view === 'overview' ? overview(success, active) : state.view === 'accounts' ? accountsView() : historyView()}</section></main></div>${state.modal ? accountModal() : ''}`
   document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => { state.view = button.dataset.view; renderShell() }))
   document.querySelector('#logout').addEventListener('click', async () => { await api('/api/auth/logout', { method: 'POST' }); state.user = null; renderLogin() })
   bindActions()
+  document.body.classList.toggle('modal-open', state.modal)
+  if (state.modal) {
+    const dialog = document.querySelector('[role="dialog"]')
+    app.querySelector('.shell').inert = true
+    dialog.querySelector('[data-close]').focus()
+    dialog.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeModal() }
+      if (event.key !== 'Tab') return
+      const focusable = [...dialog.querySelectorAll('button, a[href], input, select, summary')].filter((el) => !el.disabled && el.getClientRects().length)
+      const first = focusable[0], last = focusable.at(-1)
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    })
+  } else if (focusKey) {
+    for (const key of ['view', 'edit', 'login', 'checkin', 'add', 'refresh']) {
+      if (focusKey[key] !== undefined) {
+        [...document.querySelectorAll(`[data-${key}]`)].find((el) => el.dataset[key] === focusKey[key])?.focus({ preventScroll: true })
+        break
+      }
+    }
+  }
+}
+function closeModal() {
+  if (document.querySelector('#account-form [type="submit"]')?.disabled) return
+  if (state.dirty && !confirm('尚有未保存的修改，确定关闭吗？')) return
+  const id = state.editing?.id
+  state.modal = false
+  state.dirty = false
+  renderShell()
+  document.querySelector(id ? `[data-edit="${id}"]` : '[data-add]')?.focus()
 }
 function overview(success, active) {
-  return `<div class="grid stats"><article class="stat"><div class="label">Cookie 账号</div><div class="value">${state.accounts.length}</div></article><article class="stat"><div class="label">启用账号</div><div class="value">${active}</div></article><article class="stat"><div class="label">成功 / 已签到</div><div class="value">${success}</div></article><article class="stat"><div class="label">最近一次运行</div><div class="value" style="font-size:16px">${fmt(state.checkins[0]?.checked_at)}</div></article></div><div class="grid" style="margin-top:18px"><section class="panel"><div class="panel-head"><h2>Cookie 状态</h2><button class="btn btn-primary" data-add>添加 Cookie</button></div>${accountTable()}</section><section class="panel"><div class="panel-head"><h2>最近签到</h2><button class="btn btn-ghost" data-view="history">查看全部</button></div>${historyTable(state.checkins.slice(0, 8))}</section></div>`
+  return `<div class="grid stats"><article class="stat"><div class="label">全部账号</div><div class="value">${state.accounts.length}</div></article><article class="stat"><div class="label">已启用定时</div><div class="value">${active}</div></article><article class="stat"><div class="label">成功记录 · 最近 100 条</div><div class="value">${success}</div></article><article class="stat"><div class="label">最近一次运行</div><div class="value" style="font-size:16px">${fmt(state.checkins[0]?.checked_at)}</div></article></div><div class="grid" style="margin-top:18px"><section class="panel"><div class="panel-head"><div><h2>账号状态</h2><p class="section-note">查看登录状态、定时计划与最近一次结果。</p></div><button class="btn btn-primary" data-add>添加账号</button></div>${accountTable()}</section><section class="panel"><div class="panel-head"><h2>最近签到</h2><button class="btn btn-ghost" data-view="history">查看全部</button></div>${historyTable(state.checkins.slice(0, 8))}</section></div>`
 }
 function accountsView() {
-  return `<section class="panel"><div class="panel-head"><h2>多账号 Cookie 与独立 Webhook</h2><button class="btn btn-primary" data-add>添加 Cookie</button></div>${accountTable()}</section>`
+  return `<section class="panel"><div class="panel-head"><div><h2>我的账号</h2><p class="section-note">每个账号独立设置登录信息、签到时间与通知。</p></div><button class="btn btn-primary" data-add>添加账号</button></div>${accountTable()}</section>`
 }
 function cookieWarningSummary(item) {
   if (item.cookieWarningEnabled === false) return '到期预警已关闭'
@@ -160,58 +192,75 @@ function cookieWarningSummary(item) {
   return `到期前 ${item.cookieWarningDays ?? 3} 天预警`
 }
 function accountTable() {
-  if (!state.accounts.length) return '<div class="empty">还没有 Cookie 账号，先添加一个 GLaDOS Cookie 吧。</div>'
-  return `<div class="table-wrap"><table><thead><tr><th>账号</th><th>Cookie</th><th>定时</th><th>状态</th><th>最近运行</th><th>操作</th></tr></thead><tbody>${state.accounts.map((item) => {
+  if (!state.accounts.length) return '<div class="empty"><strong>添加第一个 GLaDOS 账号</strong><p>准备浏览器登录信息，设置时间段后即可开始定时签到。</p></div>'
+  return '<div class="account-grid">' + state.accounts.map((item) => {
     const running = state.jobs[item.id] || jobLabel(item.activeJob)
-    const cookie = item.hasFullCookie ? '<span class="badge badge-success">浏览器 Cookie</span><br/><small>gld 两项或 koa + gld 四项</small>' : '<span class="badge badge-warn">需要重新读取</span><br/><small>请导入 gld 两项 Cookie</small>'
-    return `<tr><td><strong>${esc(item.label)}</strong>${item.email ? `<br/><span class="mono">${esc(item.email)}</span>` : ''}</td><td>${cookie}<br/><small>${item.cookieExpiresAt ? `过期：${fmt(item.cookieExpiresAt)}` : '未设置过期时间'}</small></td><td>${item.enabled ? `<strong>${esc(item.scheduleTime)} – ${esc(item.scheduleEndTime || item.scheduleTime)}</strong><br/><span class="mono">${esc(item.scheduleTimezone)}</span>` : '<span class="badge badge-muted">已关闭</span>'}</td><td>${running ? '<span class="badge badge-running">' + esc(running) + '中</span>' : badge(item.lastStatus)}<br/><small>${esc(item.lastMessage || '')}</small></td><td>${fmt(item.lastCheckedAt)}</td><td><button class="btn btn-ghost" data-login="${item.id}" ${running ? 'disabled' : ''}>检测</button> <button class="btn btn-primary" data-checkin="${item.id}" ${running ? 'disabled' : ''}>签到</button> <button class="btn btn-ghost" data-edit="${item.id}" ${running ? 'disabled' : ''}>编辑</button> <button class="btn btn-danger" data-delete="${item.id}" ${running ? 'disabled' : ''}>删除</button></td></tr>`
-  }).join('')}</tbody></table></div><div class="warning-summary">${state.accounts.map((item) => `<small><strong>${esc(item.label)}</strong> · ${esc(cookieWarningSummary(item))}</small>`).join('')}</div>`
+    const disabled = running ? 'disabled' : ''
+    return `<article class="account-card"><header class="account-heading"><div><h3>${esc(item.label)}</h3><p class="account-email">${esc(item.email || '未填写备注邮箱')}</p></div>${running ? '<span class="badge badge-running">' + esc(running) + '中</span>' : badge(item.lastStatus)}</header>
+      <dl class="account-facts"><div><dt>每日定时</dt><dd>${item.enabled ? esc(item.scheduleTime) + ' – ' + esc(item.scheduleEndTime || item.scheduleTime) : '已暂停'}<small>${esc(item.scheduleTimezone)}</small></dd></div><div><dt>Cookie 到期</dt><dd>${item.hasFullCookie ? (item.cookieExpiresAt ? fmt(item.cookieExpiresAt) : '未设置') : '需要重新导入'}<small>${esc(cookieWarningSummary(item))}</small></dd></div></dl>
+      <div class="account-result"><span>最近运行 · ${fmt(item.lastCheckedAt)}</span><p>${esc(item.lastMessage || '还没有运行记录，保存后可先检测登录状态。')}</p></div>
+      <footer class="account-actions"><div><button class="btn btn-primary" data-checkin="${item.id}" ${disabled}>立即签到</button><button class="btn btn-ghost" data-login="${item.id}" ${disabled}>检测登录</button></div><div><button class="btn btn-ghost" data-edit="${item.id}" ${disabled}>编辑</button><button class="btn btn-quiet-danger" data-delete="${item.id}" ${disabled} aria-label="删除账号 ${esc(item.label)}">删除</button></div></footer></article>`
+  }).join('') + '</div>'
 }
 function historyView() {
-  return `<section class="panel"><div class="panel-head"><h2>签到历史</h2><button class="btn btn-ghost" data-refresh>刷新</button></div>${historyTable(state.checkins)}</section>`
+  return `<section class="panel"><div class="panel-head"><div><h2>签到历史</h2><p class="section-note">显示最近 100 条记录；成功、失败及站点返回消息都保留在这里。</p></div></div>${historyTable(state.checkins)}</section>`
 }
 function historyTable(rows) {
   if (!rows.length) return '<div class="empty">暂无运行记录。</div>'
-  return `<div class="table-wrap"><table><thead><tr><th>时间</th><th>账号</th><th>结果</th><th>当前积分</th><th>消息</th></tr></thead><tbody>${rows.map((item) => `<tr><td class="mono">${fmt(item.checked_at)}</td><td>${esc(item.label)}${item.email ? `<br/><span class="mono">${esc(item.email)}</span>` : ''}</td><td>${badge(item.status)}</td><td>${esc(fmtPoints(item.points))}</td><td>${esc(item.message || '—')}</td></tr>`).join('')}</tbody></table></div>`
+  return `<div class="table-wrap"><table><thead><tr><th>时间</th><th>账号</th><th>结果</th><th>当前积分</th><th>消息</th></tr></thead><tbody>${rows.map((item) => `<tr><td class="mono">${fmt(item.checked_at)}</td><td>${esc(item.label)}${item.email ? `<br/><span class="mono">${esc(item.email)}</span>` : ''}</td><td>${badge(item.status)}</td><td>${esc(fmtPoints(item.points))}</td><td class="history-message">${esc(item.message || '—')}</td></tr>`).join('')}</tbody></table></div>`
 }
 function accountModal() {
   const item = state.editing || {}
-  return `<div class="modal"><section class="modal-card">
-    <div class="modal-head"><h2>${item.id ? '编辑 Cookie' : '添加 Cookie'}</h2>
-      <div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.7.0.zip" download="glados-cookie-helper-v1.7.0.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载读取 Cookie 插件</a>
-      <button type="button" class="btn btn-import" data-import-browser-cookie title="从当前浏览器的 GLaDOS 登录状态读取 Cookie">一键读取浏览器 Cookie</button></div>
+  return `<div class="modal"><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="account-title">
+    <div class="modal-head"><div><h2 id="account-title">${item.id ? '编辑账号' : '添加账号'}</h2><p class="section-note">登录信息 → 签到计划 → 通知设置</p></div><button type="button" class="btn btn-ghost" data-close aria-label="关闭账号设置">关闭</button></div><div class="import-panel"><div><strong>从已登录的浏览器导入</strong><p class="section-note">先安装插件并授权当前后台，再读取 Cookie。</p></div>
+      <div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.7.0.zip" download="glados-cookie-helper-v1.7.0.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载插件</a>
+      <button type="button" class="btn btn-import" data-import-browser-cookie title="从当前浏览器的 GLaDOS 登录状态读取 Cookie">读取浏览器 Cookie</button></div>
     </div>
-    <form id="account-form" class="form-grid">
+    <form id="account-form" class="form-grid"><p id="form-feedback" class="form-feedback full" role="status" hidden></p><fieldset class="form-section full"><legend>01 · 登录信息</legend><div class="form-grid">
       <div class="field"><label>显示名称</label><input name="label" value="${esc(item.label)}" required /></div>
       <div class="field"><label>备注邮箱（可选）</label><input name="email" type="email" value="${esc(item.email)}" /></div>
       <input type="hidden" name="checkinMethod" value="http" />
-      <div class="field full"><label>浏览器 Cookie</label><small>至少填写同一次登录的 gld:sess 和 gld:sess.sig；如果浏览器同时存在 koa:sess 和 koa:sess.sig，也可以一并填写。编辑旧账号时留空可保持已保存的 Cookie。</small></div>
+      <details class="manual-cookies full"><summary>手动填写 Cookie</summary><div class="form-grid"><div class="field full"><label>浏览器 Cookie</label><small>至少填写同一次登录的 gld:sess 和 gld:sess.sig；如果浏览器同时存在 koa:sess 和 koa:sess.sig，也可以一并填写。编辑旧账号时留空可保持已保存的 Cookie。</small></div>
       <div class="field"><label>gld:sess</label><input name="gldSess" type="password" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 gld:sess 的值'}" /></div>
       <div class="field"><label>gld:sess.sig</label><input name="gldSessSig" type="password" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 gld:sess.sig 的值'}" /></div>
       <div class="field"><label>koa:sess（可选）</label><input name="koaSess" type="password" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 koa:sess 的值'}" /></div>
       <div class="field"><label>koa:sess.sig（可选）</label><input name="koaSessSig" type="password" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 koa:sess.sig 的值'}" /></div>
-      <div class="field full"><label>Cookie 过期时间（可选）</label><input name="cookieExpiresAt" type="datetime-local" value="${esc(toLocalInput(item.cookieExpiresAt))}" /></div>
-      <div class="field"><label class="check-label"><input name="cookieWarningEnabled" type="checkbox" ${item.cookieWarningEnabled === false ? '' : 'checked'} />Cookie 到期预警</label></div>
-      <div class="field"><label>提前天数</label><input name="cookieWarningDays" type="number" min="1" max="30" step="1" value="${esc(item.cookieWarningDays ?? 3)}" required /></div>
-      <div class="field"><label>随机入队开始时间</label><input name="scheduleTime" type="time" value="${esc(item.scheduleTime || '07:15')}" required /></div>
-      <div class="field"><label>随机入队结束时间（可跨午夜）</label><input name="scheduleEndTime" type="time" value="${esc(item.scheduleEndTime || item.scheduleTime || '09:15')}" required /></div>
+      </div></details><div class="field full"><label>Cookie 过期时间（可选）</label><input name="cookieExpiresAt" type="datetime-local" value="${esc(toLocalInput(item.cookieExpiresAt))}" /></div>
+      </div></fieldset><fieldset class="form-section full"><legend>02 · 定时签到</legend><div class="form-grid"><div class="field full"><label class="check-label"><input name="enabled" type="checkbox" ${item.enabled === false ? '' : 'checked'} />启用每日定时签到</label></div><div class="field"><label>开始时间</label><input name="scheduleTime" type="time" value="${esc(item.scheduleTime || '07:15')}" required /></div>
+      <div class="field"><label>结束时间（可跨午夜）</label><input name="scheduleEndTime" type="time" value="${esc(item.scheduleEndTime || item.scheduleTime || '09:15')}" required /></div>
       <div class="field full"><small>每天在此时间段内随机选择一分钟进入队列；起止时间相同为固定时间。队列繁忙时实际签到会顺延。</small></div>
       <div class="field"><label>签到时区</label><select name="scheduleTimezone">
         <option value="Asia/Shanghai" ${(item.scheduleTimezone || 'Asia/Shanghai') === 'Asia/Shanghai' ? 'selected' : ''}>Asia/Shanghai</option>
         <option value="Asia/Hong_Kong" ${item.scheduleTimezone === 'Asia/Hong_Kong' ? 'selected' : ''}>Asia/Hong_Kong</option>
         <option value="UTC" ${item.scheduleTimezone === 'UTC' ? 'selected' : ''}>UTC</option>
       </select></div>
-      <div class="field full"><label>Webhook URL（可选）</label><div class="inline-field"><input name="webhookUrl" type="url" value="${esc(item.webhookUrl)}" placeholder="https://example.com/hooks/glados" /><button type="button" class="btn btn-ghost" data-test-webhook>测试</button></div></div>
+      </div></fieldset><details class="notification-settings full" ${item.webhookUrl ? 'open' : ''}><summary>03 · 通知与到期提醒 <span>可选</span></summary><div class="form-grid"><div class="field full"><small>填写 Webhook 后可接收签到结果；到期提醒还需要设置 Cookie 过期时间。</small></div><div class="field full"><label>Webhook URL（可选）</label><div class="inline-field"><input name="webhookUrl" type="url" value="${esc(item.webhookUrl)}" placeholder="https://example.com/hooks/glados" /><button type="button" class="btn btn-ghost" data-test-webhook>测试</button></div></div>
       <div class="field full"><label>Webhook Secret（可选）</label><input name="webhookSecret" type="password" placeholder="请求头 x-glados-signature；留空表示保持不变" /></div>
-      <div class="field full"><label class="check-label"><input name="enabled" type="checkbox" ${item.enabled === false ? '' : 'checked'} />启用此账号的每日定时签到</label></div>
-      <div class="actions full"><button type="button" class="btn btn-ghost" data-close>取消</button><button class="btn btn-primary">保存</button></div>
+      <div class="field"><label class="check-label"><input name="cookieWarningEnabled" type="checkbox" ${item.cookieWarningEnabled === false ? '' : 'checked'} />Cookie 到期预警</label></div>
+      <div class="field"><label>提前天数</label><input name="cookieWarningDays" type="number" min="1" max="30" step="1" value="${esc(item.cookieWarningDays ?? 3)}" required /></div>
+</div></details>
+      <div class="actions full"><span class="save-hint">保存后可在账号卡片中检测登录</span><button type="button" class="btn btn-ghost" data-close>取消</button><button type="submit" class="btn btn-primary">保存账号</button></div>
     </form>
   </section></div>`
 }
+function formFeedback(message, error = false) {
+  const node = document.querySelector('#form-feedback')
+  if (!node) return toast(message)
+  node.hidden = false
+  node.classList.toggle('is-error', error)
+  node.textContent = message
+  node.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+}
 function bindActions() {
-  document.querySelector('[data-add]')?.addEventListener('click', () => { state.modal = true; state.editing = null; renderShell() })
-  document.querySelector('[data-refresh]')?.addEventListener('click', async () => { await loadData(); renderShell(); toast('已刷新') })
-  document.querySelector('[data-close]')?.addEventListener('click', () => { state.modal = false; renderShell() })
+  document.querySelector('[data-add]')?.addEventListener('click', () => { state.modal = true; state.editing = null; state.dirty = false; renderShell() })
+  document.querySelector('[data-refresh]')?.addEventListener('click', async (event) => { event.currentTarget.disabled = true; try { await loadData(); renderShell(); toast('已刷新') } catch (error) { toast(error.message); document.querySelector('[data-refresh]').disabled = false } })
+  document.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', closeModal))
+  document.querySelector('#account-form')?.addEventListener('input', () => { state.dirty = true })
+  document.querySelector('#account-form')?.addEventListener('invalid', (event) => {
+    const section = event.target.closest('details')
+    if (section) section.open = true
+  }, true)
+  document.querySelectorAll('.field input, .field select').forEach((input) => { const label = input.closest('.field').querySelector('label'); if (label) { input.id = 'field-' + input.name; label.htmlFor = input.id } })
   document.querySelector('[data-download-extension]')?.addEventListener('click', () => {
     toast('插件压缩包已开始下载，解压后请在浏览器扩展管理页加载该文件夹')
   })
@@ -233,14 +282,16 @@ function bindActions() {
           form.append(hidden)
         }
         hidden.value = data.cookieHeader
+        for (const name of ['gldSess', 'gldSessSig', 'koaSess', 'koaSessSig']) form.elements[name].value = ''
+        state.dirty = true
       }
       form.elements.label.value = data.username || data.email || form.elements.label.value
       if (data.email) form.elements.email.value = data.email
       if (data.cookieExpiresAt) form.elements.cookieExpiresAt.value = toLocalInput(data.cookieExpiresAt)
       const names = Array.isArray(data.cookieNames) ? data.cookieNames.join('、') : '完整 Cookie'
-      toast(`已读取 ${names}，请保存`)
+      formFeedback(`已读取 ${names}。点击“保存账号”完成导入。`)
     } catch (error) {
-      toast(error.message)
+      formFeedback(error.message, true)
     } finally {
       button.disabled = false
       button.textContent = originalText
@@ -248,7 +299,12 @@ function bindActions() {
   })
   document.querySelector('#account-form')?.addEventListener('submit', async (event) => {
     event.preventDefault()
-    const payload = Object.fromEntries(new FormData(event.currentTarget))
+    const form = event.currentTarget
+    const submit = form.querySelector('[type="submit"]')
+    if (submit.disabled) return
+    submit.disabled = true
+    submit.textContent = '正在保存…'
+    const payload = Object.fromEntries(new FormData(form))
     payload.enabled = event.currentTarget.elements.enabled.checked
     payload.cookieWarningEnabled = event.currentTarget.elements.cookieWarningEnabled.checked
     payload.cookieWarningDays = Number(payload.cookieWarningDays)
@@ -256,11 +312,19 @@ function bindActions() {
       const url = state.editing ? `/api/accounts/${state.editing.id}` : '/api/accounts'
       await api(url, { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(payload) })
       state.modal = false
-      await loadData()
+      state.dirty = false
+      try { await loadData() } catch {
+        renderShell()
+        toast('账号已保存，列表刷新失败，请点击“刷新数据”。')
+        return
+      }
       renderShell()
       toast('账号已保存')
     } catch (e) {
-      toast(e.message)
+      formFeedback(e.message, true)
+    } finally {
+      submit.disabled = false
+      submit.textContent = '保存账号'
     }
   })
   document.querySelector('[data-test-webhook]')?.addEventListener('click', async (event) => {
@@ -279,7 +343,7 @@ function bindActions() {
       button.disabled = false
     }
   })
-  document.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => { state.editing = state.accounts.find((x) => x.id === Number(b.dataset.edit)); state.modal = true; renderShell() }))
+  document.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => { state.editing = state.accounts.find((x) => x.id === Number(b.dataset.edit)); state.modal = true; state.dirty = false; renderShell() }))
   document.querySelectorAll('[data-delete]').forEach((b) => b.addEventListener('click', async () => { if (!confirm('确定删除这个账号及其历史记录吗？')) return; await api(`/api/accounts/${b.dataset.delete}`, { method: 'DELETE' }); await loadData(); renderShell(); toast('已删除') }))
   document.querySelectorAll('[data-login]').forEach((b) => b.addEventListener('click', () => runJob(`/api/accounts/${b.dataset.login}/login`, Number(b.dataset.login), '检测')))
   document.querySelectorAll('[data-checkin]').forEach((b) => b.addEventListener('click', () => runJob(`/api/accounts/${b.dataset.checkin}/checkin`, Number(b.dataset.checkin), '签到')))
@@ -297,7 +361,7 @@ async function boot() {
 boot()
 let refreshing = false
 setInterval(async () => {
-  if (!state.user || state.modal || refreshing || document.hidden) return
+  if (!state.user || state.modal || refreshing || document.hidden || document.activeElement?.closest('.content')) return
   refreshing = true
   try {
     await loadData()

@@ -52,6 +52,8 @@ nano .env
 
 将 `ADMIN_PASSWORD=change-this-password` 等号后的内容换成自己的长密码（建议使用字母和数字）。管理员用户名默认为 `admin`，也可以修改。其他配置保持不变即可。
 
+上一步已自动生成 `APP_SECRET` 和 `SESSION_SECRET`，请保留。若省略这两项，程序会使用公开的开发默认值 `dev-only-change-me` 和 `dev-session-secret-change-me`；公网部署请使用生成的随机密钥。
+
 按 **Ctrl + O → 回车** 保存，再按 **Ctrl + X** 退出。若服务器没有 nano，可使用服务器面板的文件编辑器编辑此目录下的 `.env`。
 
 | 配置 | 作用 | 是否需要修改 |
@@ -106,7 +108,7 @@ docker compose up -d
 
 ## 轻量运行方式
 
-容器不再内置 Chromium、Xvfb、VNC 或 noVNC，也不暴露 6080 端口。签到请求从服务器的原生 HTTP 客户端发出，带有真实浏览器导入的完整 Cookie、来源页和常用浏览器请求头；每次只在随机时间窗内完成一次状态检查和一次签到提交。
+签到请求从服务器的原生 HTTP 客户端发出，带有真实浏览器导入的完整 Cookie、来源页和常用浏览器请求头；每次只在随机时间窗内完成一次状态检查和一次签到提交。
 
 新版插件以 `gld:sess`、`gld:sess.sig` 为必需登录态；若浏览器同时保存 `koa:sess`、`koa:sess.sig`，会将四项一并导入。服务端将导入内容加密后作为 Cookie 请求头发送。
 

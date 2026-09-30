@@ -197,6 +197,7 @@ function accountTable() {
     const running = state.jobs[item.id] || jobLabel(item.activeJob)
     const disabled = running ? 'disabled' : ''
     return `<article class="account-card"><header class="account-heading"><div><h3>${esc(item.label)}</h3><p class="account-email">${esc(item.email || '未填写备注邮箱')}</p></div>${running ? '<span class="badge badge-running">' + esc(running) + '中</span>' : badge(item.lastStatus)}</header>
+      <div class="account-points"><div><span>当前积分</span><strong>${esc(fmtPoints(item.currentPoints))}</strong></div><small>${item.pointsUpdatedAt ? `最近获取：${fmt(item.pointsUpdatedAt)}` : '签到后获取积分'}</small></div>
       <dl class="account-facts"><div><dt>每日定时</dt><dd>${item.enabled ? esc(item.scheduleTime) + ' – ' + esc(item.scheduleEndTime || item.scheduleTime) : '已暂停'}<small>${esc(item.scheduleTimezone)}</small></dd></div><div><dt>Cookie 到期</dt><dd>${item.hasFullCookie ? (item.cookieExpiresAt ? fmt(item.cookieExpiresAt) : '未设置') : '需要重新导入'}<small>${esc(cookieWarningSummary(item))}</small></dd></div></dl>
       <div class="account-result"><span>最近运行 · ${fmt(item.lastCheckedAt)}</span><p>${esc(item.lastMessage || '还没有运行记录，保存后可先检测登录状态。')}</p></div>
       <footer class="account-actions"><div><button class="btn btn-primary" data-checkin="${item.id}" ${disabled}>立即签到</button><button class="btn btn-ghost" data-login="${item.id}" ${disabled}>检测登录</button></div><div><button class="btn btn-ghost" data-edit="${item.id}" ${disabled}>编辑</button><button class="btn btn-quiet-danger" data-delete="${item.id}" ${disabled} aria-label="删除账号 ${esc(item.label)}">删除</button></div></footer></article>`
@@ -207,7 +208,7 @@ function historyView() {
 }
 function historyTable(rows) {
   if (!rows.length) return '<div class="empty">暂无运行记录。</div>'
-  return `<div class="table-wrap"><table><thead><tr><th>时间</th><th>账号</th><th>结果</th><th>当前积分</th><th>消息</th></tr></thead><tbody>${rows.map((item) => `<tr><td class="mono">${fmt(item.checked_at)}</td><td>${esc(item.label)}${item.email ? `<br/><span class="mono">${esc(item.email)}</span>` : ''}</td><td>${badge(item.status)}</td><td>${esc(fmtPoints(item.points))}</td><td class="history-message">${esc(item.message || '—')}</td></tr>`).join('')}</tbody></table></div>`
+  return `<div class="table-wrap"><table><thead><tr><th>时间</th><th>账号</th><th>结果</th><th>消息</th></tr></thead><tbody>${rows.map((item) => `<tr><td class="mono">${fmt(item.checked_at)}</td><td>${esc(item.label)}${item.email ? `<br/><span class="mono">${esc(item.email)}</span>` : ''}</td><td>${badge(item.status)}</td><td class="history-message">${esc(item.message || '—')}</td></tr>`).join('')}</tbody></table></div>`
 }
 function accountModal() {
   const item = state.editing || {}

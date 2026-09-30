@@ -62,6 +62,8 @@ CREATE TABLE IF NOT EXISTS cookie_warnings (
   UNIQUE(account_id, cookie_expires_at, phase, period_key),
   FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS checkins_account_points ON checkins(account_id, id DESC)
+  WHERE points IS NOT NULL AND TRIM(points) <> '' AND status IN ('success', 'already_signed');
 `)
 
 const accountColumns = db.prepare('PRAGMA table_info(accounts)').all().map((column) => column.name)
@@ -93,6 +95,9 @@ if (!existingAdmin) {
 
 export function accountPublic(row) {
   if (!row) return null
+  const balance = db.prepare(`SELECT points, checked_at FROM checkins
+    WHERE account_id = ? AND points IS NOT NULL AND TRIM(points) <> ''
+      AND status IN ('success', 'already_signed') ORDER BY id DESC LIMIT 1`).get(row.id)
   const warning = row.cookie_expires_at ? db.prepare(`SELECT status, sent_at, last_error FROM cookie_warnings
     WHERE account_id = ? AND cookie_expires_at = ? ORDER BY id DESC LIMIT 1`).get(row.id, row.cookie_expires_at) : null
   const lastMessage = String(row.last_message || '')
@@ -101,6 +106,8 @@ export function accountPublic(row) {
   return {
     id: row.id,
     label: row.label,
+    currentPoints: balance?.points ?? null,
+    pointsUpdatedAt: balance?.checked_at ?? null,
     email: row.email,
     imapHost: row.imap_host,
     imapPort: row.imap_port,

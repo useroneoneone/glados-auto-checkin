@@ -1,6 +1,9 @@
 # GLaDOS 多账号自动签到
 
-使用 Cookie 管理多个 GLaDOS 账号，支持定时签到、独立 Webhook、Cookie 到期预警和浏览器插件导入。
+一款好用福利多的梯子
+glados登录地址：https://glados-facility.com/login
+
+本项目使用 Cookie 管理多个 GLaDOS 账号，支持定时签到、独立 Webhook、Cookie 到期预警和浏览器插件导入。
 
 - 手动签到、定时签到和登录检测统一排队，只使用 Node 原生 HTTP 客户端，不启动浏览器。
 - GET 临时网络错误有限重试，结果不明的签到提交不会自动重放。
@@ -133,9 +136,10 @@ docker compose up -d
 
 1. 在账号窗口点击“下载插件”，下载 1.8.0 并解压 ZIP。
 2. 打开 `chrome://extensions/` 或 `edge://extensions/`，开启开发者模式，加载解压后的文件夹。
-3. 在同一浏览器中登录 GLaDOS，再打开签到管理后台。
-4. 点击插件图标，选择“永久授权当前网站”，随后回到后台点击“读取浏览器 Cookie”。以后刷新后台或重启浏览器都会自动连接。
+3. 在同一浏览器中登录 GLaDOS，再打开本项目部署后的签到管理后台页面。
+4. 点击插件图标，选择“永久授权当前网站”，随后回到后台页面点击“读取浏览器 Cookie”。以后刷新后台或重启浏览器都会自动连接。
 5. 确认名称、Cookie 和到期时间后保存。
+<img width="1303" height="781" alt="image" src="https://github.com/user-attachments/assets/3e292d2a-e6f7-45d3-9e8b-6cbb75ca0202" />
 
 更换后台域名时，在新网站上点击插件图标重新授权即可，不需要修改代码。插件没有使用 `activeTab` 临时权限。本机 `http://127.0.0.1:3000` 和 `http://localhost:3000` 为内置允许地址。
 

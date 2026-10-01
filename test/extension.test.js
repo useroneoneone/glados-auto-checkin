@@ -16,8 +16,12 @@ function readSession(cookies, { directRead = true } = {}) {
         get: async ({ name }) => directRead ? materializedCookies.find((cookie) => cookie.name === name) || null : null,
         getAll: async () => materializedCookies,
       },
-      runtime: { onMessage: { addListener() {} } },
-      permissions: { onRemoved: { addListener() {} } },
+      runtime: {
+        onMessage: { addListener() {} },
+        onInstalled: { addListener() {} },
+        onStartup: { addListener() {} },
+      },
+      permissions: { onAdded: { addListener() {} }, onRemoved: { addListener() {} } },
     },
   })
   vm.runInContext(source, context)

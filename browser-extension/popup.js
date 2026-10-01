@@ -17,15 +17,6 @@ function permissionPattern(origin) {
   return `${origin}/*`
 }
 
-function registeredScriptId(origin) {
-  let hash = 2166136261
-  for (const char of origin) {
-    hash ^= char.charCodeAt(0)
-    hash = Math.imul(hash, 16777619)
-  }
-  return `glados_console_${(hash >>> 0).toString(16)}`
-}
-
 function setMessage(message, isError = false) {
   messageNode.textContent = message
   messageNode.classList.toggle('error', isError)
@@ -46,40 +37,36 @@ async function activeSite() {
   return { tabId: tab.id, origin: url.origin, pattern: permissionPattern(url.origin) }
 }
 
-async function registerContentScript(site) {
-  const id = registeredScriptId(site.origin)
-  const script = {
-    id,
-    matches: [site.pattern],
-    js: ['content-script.js'],
-    runAt: 'document_start',
-    persistAcrossSessions: true,
-  }
-  const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [id] })
-  if (existing.length) await chrome.scripting.updateContentScripts([script])
-  else await chrome.scripting.registerContentScripts([script])
-}
-
-async function injectCurrentPage(site) {
-  await chrome.scripting.executeScript({
-    target: { tabId: site.tabId },
-    files: ['content-script.js'],
-  })
+async function connectCurrentPage(site) {
+  const response = await chrome.runtime.sendMessage({ type: 'CONNECT_GLADOS_CONSOLE', tabId: site.tabId })
+  if (!response?.ok) throw new Error(response?.error || '连接当前页面失败')
 }
 
 async function render() {
   try {
-    currentSite = await activeSite()
-    originNode.textContent = currentSite.origin
-    const isStatic = STATIC_CONSOLE_ORIGINS.has(currentSite.origin)
-    const isGranted = isStatic || await chrome.permissions.contains({ origins: [currentSite.pattern] })
+    const site = await activeSite()
+    currentSite = site
+    originNode.textContent = site.origin
+    const isStatic = STATIC_CONSOLE_ORIGINS.has(site.origin)
+    const isGranted = isStatic || await chrome.permissions.contains({ origins: [site.pattern] })
 
     statusNode.textContent = isStatic ? '内置允许' : isGranted ? '已永久授权' : '尚未授权'
     statusNode.classList.toggle('granted', isGranted)
     authorizeButton.classList.toggle('hidden', isGranted)
     reconnectButton.classList.toggle('hidden', !isGranted)
     revokeButton.classList.toggle('hidden', isStatic || !isGranted)
-    setMessage(isGranted ? '可以连接当前后台页面。' : '授权后会一直保留，直到你主动取消。')
+    setMessage(isGranted ? '正在连接当前后台页面...' : '授权后会一直保留，直到你主动取消。')
+    if (isGranted) {
+      try {
+        await connectCurrentPage(site)
+        statusNode.textContent = isStatic ? '内置允许，已连接' : '已永久授权，已连接'
+        setMessage('已连接，回到后台即可读取 Cookie；以后刷新会自动连接。')
+        return true
+      } catch (error) {
+        statusNode.textContent = '已授权，连接失败'
+        setMessage(error.message || '连接失败，请刷新后台后重试', true)
+      }
+    }
   } catch (error) {
     currentSite = null
     originNode.textContent = '不可授权'
@@ -90,19 +77,18 @@ async function render() {
     revokeButton.classList.add('hidden')
     setMessage(error.message, true)
   }
+  return false
 }
 
 authorizeButton.addEventListener('click', async () => {
   if (!currentSite) return
+  const site = currentSite
   setBusy(true)
   setMessage('正在请求浏览器授权...')
   try {
-    const granted = await chrome.permissions.request({ origins: [currentSite.pattern] })
+    const granted = await chrome.permissions.request({ origins: [site.pattern] })
     if (!granted) throw new Error('你没有授予当前网站权限')
-    await registerContentScript(currentSite)
-    await injectCurrentPage(currentSite)
-    await render()
-    setMessage('授权成功，现在可以返回后台点击“一键读取浏览器 Cookie”。')
+    if (await render()) setMessage('授权成功，现在可以返回后台点击“一键读取浏览器 Cookie”。')
   } catch (error) {
     setMessage(error.message || '授权失败', true)
   } finally {
@@ -114,9 +100,7 @@ reconnectButton.addEventListener('click', async () => {
   if (!currentSite) return
   setBusy(true)
   try {
-    if (!STATIC_CONSOLE_ORIGINS.has(currentSite.origin)) await registerContentScript(currentSite)
-    await injectCurrentPage(currentSite)
-    setMessage('连接成功，现在可以返回后台读取 Cookie。')
+    if (await render()) setMessage('连接成功，现在可以返回后台读取 Cookie。')
   } catch (error) {
     setMessage(error.message || '连接当前页面失败', true)
   } finally {
@@ -128,8 +112,6 @@ revokeButton.addEventListener('click', async () => {
   if (!currentSite) return
   setBusy(true)
   try {
-    const id = registeredScriptId(currentSite.origin)
-    await chrome.scripting.unregisterContentScripts({ ids: [id] }).catch(() => {})
     await chrome.permissions.remove({ origins: [currentSite.pattern] })
     await render()
     setMessage('已取消当前网站授权，刷新后台页面后生效。')

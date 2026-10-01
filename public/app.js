@@ -73,7 +73,7 @@ function readBrowserCookie() {
     const requestId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
     const timeout = setTimeout(() => {
       window.removeEventListener('message', receive)
-      reject(new Error('未连接 GLaDOS Cookie Helper，请点击浏览器工具栏插件图标，永久授权当前后台网站后重试'))
+      reject(new Error('未连接 GLaDOS Cookie Helper，请确认已安装 1.8.0 或更新版本；点击插件图标授权当前后台网站，再刷新后台重试'))
     }, 6000)
     function receive(event) {
       const message = event.data
@@ -214,7 +214,7 @@ function accountModal() {
   const item = state.editing || {}
   return `<div class="modal"><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="account-title">
     <div class="modal-head"><div><h2 id="account-title">${item.id ? '编辑账号' : '添加账号'}</h2><p class="section-note">登录信息 → 签到计划 → 通知设置</p></div><button type="button" class="btn btn-ghost" data-close aria-label="关闭账号设置">关闭</button></div><div class="import-panel"><div><strong>从已登录的浏览器导入</strong><p class="section-note">先安装插件并授权当前后台，再读取 Cookie。</p></div>
-      <div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.7.0.zip" download="glados-cookie-helper-v1.7.0.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载插件</a>
+      <div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.8.0.zip" download="glados-cookie-helper-v1.8.0.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载插件</a>
       <button type="button" class="btn btn-import" data-import-browser-cookie title="从当前浏览器的 GLaDOS 登录状态读取 Cookie">读取浏览器 Cookie</button></div>
     </div>
     <form id="account-form" class="form-grid"><p id="form-feedback" class="form-feedback full" role="status" hidden></p><fieldset class="form-section full"><legend>01 · 登录信息</legend><div class="form-grid">
@@ -273,7 +273,7 @@ function bindActions() {
     button.textContent = '正在读取...'
     try {
       const data = await readBrowserCookie()
-      if (!data.cookieHeader) throw new Error('读取插件版本过旧，请下载并更新到 1.7.0 后重试')
+      if (!data.cookieHeader) throw new Error('读取插件版本过旧，请下载并更新到 1.8.0 后重试')
       if (data.cookieHeader) {
         let hidden = form.elements.cookieHeader
         if (!hidden) {

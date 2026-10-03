@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs'
 import { config } from './config.js'
 import { db, accountPublic } from './db.js'
 import { encrypt } from './crypto.js'
+import { saveAccountProfile } from './profile.js'
 import { jobs, queueLogin, queueCheckin, queueWebhookTest, startScheduler } from './automation.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -89,6 +90,20 @@ const warningEnabled = (value, fallback = true) => {
   if (typeof value !== 'boolean') throw new Error('到期预警开关格式无效')
   return value
 }
+const autoExchangeEnabled = (value, fallback = false) => {
+  if (value === undefined) return Boolean(fallback)
+  if (typeof value !== 'boolean') throw new Error('自动兑换开关格式无效')
+  return value
+}
+const importedProfile = (value) => {
+  if (value === undefined) return null
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('账号属性格式无效')
+  const days = value.leftDays
+  if (days != null && (!['number', 'string'].includes(typeof days) || String(days).trim() === '' || !Number.isFinite(Number(days)) || Math.abs(Number(days)) > 100000)) throw new Error('剩余时长格式无效')
+  const plan = value.plan
+  if (plan != null && !['Free', 'Edu', 'Basic', 'Pro', 'Team', 'Enterprise'].includes(plan)) throw new Error('套餐类型格式无效')
+  return { leftDays: days == null ? null : String(Number(days)), plan: plan ?? null }
+}
 
 const loginAttempts = new Map()
 const authRateLimit = (req, res, next) => {
@@ -128,6 +143,8 @@ app.post('/api/accounts', requireAuth, (req, res) => {
   let accountScheduleTimezone
   let cookieWarningDays
   let cookieWarningEnabled
+  let exchangeEnabled
+  let profile
   try {
     cookieHeader = completeCookieHeader(body)
     accountCheckinMethod = checkinMethod(body.checkinMethod)
@@ -139,6 +156,8 @@ app.post('/api/accounts', requireAuth, (req, res) => {
     accountScheduleTimezone = scheduleTimezone(body.scheduleTimezone)
     cookieWarningDays = warningDays(body.cookieWarningDays)
     cookieWarningEnabled = warningEnabled(body.cookieWarningEnabled)
+    exchangeEnabled = autoExchangeEnabled(body.autoExchangeEnabled)
+    profile = importedProfile(body.profile)
   } catch (error) { return res.status(400).json({ error: error.message }) }
   const now = new Date().toISOString()
   const result = db.prepare(`INSERT INTO accounts (label, email, imap_host, imap_port, imap_secure, imap_user, imap_password_enc, webhook_url, webhook_secret_enc, cookie_enc, cookie_sess_enc, cookie_sess_sig_enc, cookie_expires_at, schedule_time, schedule_end_time, schedule_timezone, enabled, cookie_warning_enabled, cookie_warning_days, created_at, updated_at, cookie_namespace, checkin_method, cookie_format_version)
@@ -148,6 +167,8 @@ app.post('/api/accounts', requireAuth, (req, res) => {
     encrypt(cookieHeader), null, null, cookieExpiresAt,
     accountScheduleTime, accountScheduleEndTime, accountScheduleTimezone, body.enabled === false ? 0 : 1, cookieWarningEnabled ? 1 : 0, cookieWarningDays, now, now, 'gld', accountCheckinMethod, COOKIE_FORMAT_VERSION,
   )
+  db.prepare('UPDATE accounts SET auto_exchange_enabled = ? WHERE id = ?').run(exchangeEnabled ? 1 : 0, result.lastInsertRowid)
+  saveAccountProfile(db, result.lastInsertRowid, profile)
   res.status(201).json({ account: accountPublic(getAccount(result.lastInsertRowid)) })
 })
 app.put('/api/accounts/:id', requireAuth, (req, res) => {
@@ -163,6 +184,8 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
   let accountScheduleTimezone = account.schedule_timezone || 'Asia/Shanghai'
   let cookieWarningDays
   let cookieWarningEnabled
+  let exchangeEnabled
+  let profile
   try {
     cookieHeader = completeCookieHeader(body)
     accountCheckinMethod = checkinMethod(body.checkinMethod, accountCheckinMethod)
@@ -174,6 +197,8 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
     if (body.scheduleTimezone !== undefined) accountScheduleTimezone = scheduleTimezone(body.scheduleTimezone)
     cookieWarningDays = warningDays(body.cookieWarningDays, account.cookie_warning_days)
     cookieWarningEnabled = warningEnabled(body.cookieWarningEnabled, account.cookie_warning_enabled)
+    exchangeEnabled = autoExchangeEnabled(body.autoExchangeEnabled, account.auto_exchange_enabled)
+    profile = importedProfile(body.profile)
   } catch (error) { return res.status(400).json({ error: error.message }) }
   const now = new Date().toISOString()
   const fullCookieEnc = cookieHeader ? encrypt(cookieHeader) : account.cookie_enc
@@ -186,6 +211,9 @@ app.put('/api/accounts/:id', requireAuth, (req, res) => {
     fullCookieEnc, null, null, cookieExpiresAt, accountScheduleTime, accountScheduleEndTime, accountScheduleTimezone,
     enabled, cookieWarningEnabled ? 1 : 0, cookieWarningDays, lastScheduledDate, scheduleChanged ? null : account.schedule_plan_date, scheduleChanged ? null : account.schedule_plan_minute, now, 'gld', accountCheckinMethod, cookieHeader ? COOKIE_FORMAT_VERSION : account.cookie_format_version, account.id,
   )
+  db.prepare('UPDATE accounts SET auto_exchange_enabled = ? WHERE id = ?').run(exchangeEnabled ? 1 : 0, account.id)
+  if (cookieHeader) db.prepare('UPDATE accounts SET left_days = NULL, plan = NULL, profile_updated_at = NULL WHERE id = ?').run(account.id)
+  saveAccountProfile(db, account.id, profile)
   res.json({ account: accountPublic(getAccount(account.id)) })
 })
 app.delete('/api/accounts/:id', requireAuth, (req, res) => {

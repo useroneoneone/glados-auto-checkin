@@ -4,13 +4,13 @@ import vm from 'node:vm'
 import { readFileSync } from 'node:fs'
 
 const source = readFileSync(new URL('../browser-extension/service-worker.js', import.meta.url), 'utf8')
-function readSession(cookies, { directRead = true } = {}) {
+function readSession(cookies, { directRead = true, status = { email: 'fixture@example.test' } } = {}) {
   const materializedCookies = Object.entries(cookies).map(([name, value]) => ({
     name, domain: 'glados-facility.com', path: '/', ...value,
   }))
   const context = vm.createContext({
     URL, TextDecoder, Uint8Array, atob,
-    fetch: async () => ({ ok: true, json: async () => ({ email: 'fixture@example.test' }) }),
+    fetch: async () => ({ ok: true, json: async () => status }),
     chrome: {
       cookies: {
         get: async ({ name }) => directRead ? materializedCookies.find((cookie) => cookie.name === name) || null : null,
@@ -28,6 +28,23 @@ function readSession(cookies, { directRead = true } = {}) {
   return vm.runInContext('readGladosSession()', context)
 }
 const cookie = (value, expirationDate) => ({ value, expirationDate })
+
+test('extension imports Plan and official rounded Days Left without changing the name', async () => {
+  for (const [vip, plan] of [[0, 'Free'], [10, 'Free'], [11, 'Edu'], [21, 'Basic'], [31, 'Pro'], [41, 'Team'], [51, 'Enterprise']]) {
+    const result = await readSession({ 'gld:sess': cookie('new'), 'gld:sess.sig': cookie('sig') },
+      { status: { code: 0, data: { username: 'Fixture', leftDays: '1.490000000', vip } } })
+    assert.equal(result.username, 'Fixture')
+    assert.equal(result.leftDays, '1.49')
+    assert.equal(result.daysLeft, 1)
+    assert.equal(result.plan, plan)
+  }
+})
+
+test('missing or malformed profile stays unknown rather than displaying zero or a false plan', async () => {
+  const result = await readSession({ 'gld:sess': cookie('new'), 'gld:sess.sig': cookie('sig') }, { status: { data: { email: 'fixture@example.test', leftDays: 'invalid' } } })
+  assert.equal(result.daysLeft, null)
+  assert.equal(result.plan, null)
+})
 
 test('extension imports all four current browser cookies and uses earliest expiry', async () => {
   const result = await readSession({

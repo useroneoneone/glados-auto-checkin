@@ -3,6 +3,7 @@ import path from 'node:path'
 import Database from 'better-sqlite3'
 import bcrypt from 'bcryptjs'
 import { config } from './config.js'
+import { userProfile } from './profile.js'
 
 fs.mkdirSync(path.dirname(path.resolve(config.databasePath)), { recursive: true })
 export const db = new Database(config.databasePath)
@@ -62,6 +63,21 @@ CREATE TABLE IF NOT EXISTS cookie_warnings (
   UNIQUE(account_id, cookie_expires_at, phase, period_key),
   FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS exchanges (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER NOT NULL,
+  plan_type TEXT NOT NULL,
+  days INTEGER NOT NULL,
+  cost REAL NOT NULL,
+  status TEXT NOT NULL,
+  guard_active INTEGER NOT NULL DEFAULT 1,
+  before_json TEXT NOT NULL,
+  message TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS exchanges_account ON exchanges(account_id, id DESC);
 CREATE INDEX IF NOT EXISTS checkins_account_points ON checkins(account_id, id DESC)
   WHERE points IS NOT NULL AND TRIM(points) <> '' AND status IN ('success', 'already_signed');
 `)
@@ -81,6 +97,9 @@ if (!accountColumns.includes('last_scheduled_date')) db.prepare('ALTER TABLE acc
 if (!accountColumns.includes('cookie_warning_enabled')) db.prepare('ALTER TABLE accounts ADD COLUMN cookie_warning_enabled INTEGER NOT NULL DEFAULT 1').run()
 if (!accountColumns.includes('cookie_warning_days')) db.prepare('ALTER TABLE accounts ADD COLUMN cookie_warning_days INTEGER NOT NULL DEFAULT 3').run()
 for (const [name, type] of Object.entries({ schedule_end_time: 'TEXT', schedule_plan_date: 'TEXT', schedule_plan_minute: 'INTEGER' })) {
+  if (!accountColumns.includes(name)) db.exec(`ALTER TABLE accounts ADD COLUMN ${name} ${type}`)
+}
+for (const [name, type] of Object.entries({ auto_exchange_enabled: 'INTEGER NOT NULL DEFAULT 0', left_days: 'TEXT', plan: 'TEXT', profile_updated_at: 'TEXT' })) {
   if (!accountColumns.includes(name)) db.exec(`ALTER TABLE accounts ADD COLUMN ${name} ${type}`)
 }
 
@@ -106,6 +125,11 @@ export function accountPublic(row) {
   return {
     id: row.id,
     label: row.label,
+    leftDays: row.left_days ?? null,
+    daysLeft: userProfile({ leftDays: row.left_days }).daysLeft,
+    plan: row.plan ?? null,
+    profileUpdatedAt: row.profile_updated_at ?? null,
+    autoExchangeEnabled: Boolean(row.auto_exchange_enabled),
     currentPoints: balance?.points ?? null,
     pointsUpdatedAt: balance?.checked_at ?? null,
     email: row.email,

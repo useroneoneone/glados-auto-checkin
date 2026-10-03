@@ -107,6 +107,6 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" "$archive" .local-release/SHA256SUMS \
               --verify-tag --title "GLaDOS $GITHUB_REF_NAME" \
-              --notes-file docs/release-notes-v1.1.0.md
+              --notes-file "docs/release-notes-$GITHUB_REF_NAME.md"
           fi
           echo "Deployment bundle: https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"

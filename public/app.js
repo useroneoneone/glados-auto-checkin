@@ -76,7 +76,7 @@ function readBrowserCookie() {
     const requestId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
     const timeout = setTimeout(() => {
       window.removeEventListener('message', receive)
-      reject(new Error('未连接 GLaDOS Cookie Helper，请确认已安装 1.8.0 或更新版本；点击插件图标授权当前后台网站，再刷新后台重试'))
+      reject(new Error('未连接 GLaDOS Cookie Helper，请确认已安装 1.9.0 或更新版本；点击插件图标授权当前后台网站，再刷新后台重试'))
     }, 6000)
     function receive(event) {
       const message = event.data
@@ -215,9 +215,10 @@ function accountTable() {
   return '<div class="account-grid">' + state.accounts.map((item) => {
     const running = state.jobs[item.id] || jobLabel(item.activeJob)
     const disabled = running ? 'disabled' : ''
-    return `<article class="account-card"><header class="account-heading"><div><h3>${esc(item.label)}</h3><p class="account-email">${esc(item.email || '未填写备注邮箱')}</p></div>${running ? '<span class="badge badge-running">' + esc(running) + '中</span>' : badge(item.lastStatus)}</header>
+    return `<article class="account-card"><header class="account-heading"><h3>${esc(item.label)}</h3><span class="account-plan" aria-label="Plan 类型">${esc(item.plan || '套餐待获取')}</span>${running ? '<span class="badge badge-running">' + esc(running) + '中</span>' : badge(item.lastStatus)}<p class="account-email">${esc(item.email || '未填写备注邮箱')}</p><span class="account-days ${item.daysLeft != null && item.daysLeft <= 1 ? 'is-expiring' : ''}" title="${item.profileUpdatedAt ? `最近获取：${esc(fmt(item.profileUpdatedAt))}` : '读取新版插件或检测登录后获取'}">${item.daysLeft == null ? '剩余时长待获取' : `剩余 ${esc(item.daysLeft)} 天`}</span></header>
       <div class="account-points"><div><span>当前积分</span><strong>${esc(fmtPoints(item.currentPoints))}</strong></div><small>${item.pointsUpdatedAt ? `最近获取：${fmt(item.pointsUpdatedAt)}` : '签到后获取积分'}</small></div>
       <dl class="account-facts"><div><dt>每日定时</dt><dd>${item.enabled ? esc(item.scheduleTime) + ' – ' + esc(item.scheduleEndTime || item.scheduleTime) : '已暂停'}<small>${esc(item.scheduleTimezone)}</small></dd></div><div><dt>Cookie 到期</dt><dd>${item.hasFullCookie ? (item.cookieExpiresAt ? fmt(item.cookieExpiresAt) : '未设置') : '需要重新导入'}<small>${esc(cookieWarningSummary(item))}</small></dd></div></dl>
+      <p class="exchange-summary">自动兑换 · ${item.autoExchangeEnabled ? (item.enabled ? '已开启，剩余 1 天时签到后检查' : '随每日定时签到暂停') : '已关闭'}</p>
       <div class="account-result"><span>最近运行 · ${fmt(item.lastCheckedAt)}</span><p>${esc(item.lastMessage || '还没有运行记录，保存后可先检测登录状态。')}</p></div>
       <footer class="account-actions"><div><button class="btn btn-primary" data-checkin="${item.id}" ${disabled}>立即签到</button><button class="btn btn-ghost" data-login="${item.id}" ${disabled}>检测登录</button></div><div><button class="btn btn-ghost" data-edit="${item.id}" ${disabled}>编辑</button><button class="btn btn-quiet-danger" data-delete="${item.id}" ${disabled} aria-label="删除账号 ${esc(item.label)}">删除</button></div></footer></article>`
   }).join('') + '</div>'
@@ -233,12 +234,13 @@ function accountModal() {
   const item = state.editing || {}
   return `<div class="modal"><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="account-title">
     <div class="modal-head"><div><h2 id="account-title">${item.id ? '编辑账号' : '添加账号'}</h2><p class="section-note">登录信息 → 签到计划 → 通知设置</p></div><button type="button" class="btn btn-ghost" data-close aria-label="关闭账号设置">关闭</button></div><div class="import-panel"><div><strong>从已登录的浏览器导入</strong><p class="section-note">先安装插件并授权当前后台，再读取 Cookie。</p></div>
-      <div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.8.0.zip" download="glados-cookie-helper-v1.8.0.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载插件</a>
+      <div class="modal-tools"><a class="btn btn-download" href="/downloads/glados-cookie-helper-v1.9.0.zip" download="glados-cookie-helper-v1.9.0.zip" data-download-extension title="下载浏览器 Cookie 读取插件压缩包">下载插件</a>
       <button type="button" class="btn btn-import" data-import-browser-cookie title="从当前浏览器的 GLaDOS 登录状态读取 Cookie">读取浏览器 Cookie</button></div>
     </div>
     <form id="account-form" class="form-grid"><p id="form-feedback" class="form-feedback full" role="status" hidden></p><fieldset class="form-section full"><legend>01 · 登录信息</legend><div class="form-grid">
       <div class="field"><label>显示名称</label><input name="label" value="${esc(item.label)}" required /></div>
       <div class="field"><label>备注邮箱（可选）</label><input name="email" type="email" value="${esc(item.email)}" /></div>
+      <p class="profile-preview full" data-profile-preview>套餐：${esc(item.plan || '待获取')} · ${item.daysLeft == null ? '剩余时长待获取' : `剩余 ${esc(item.daysLeft)} 天`}（读取插件或检测登录后更新）</p>
       <input type="hidden" name="checkinMethod" value="http" />
       <details class="manual-cookies full"><summary>手动填写 Cookie</summary><div class="form-grid"><div class="field full"><label>浏览器 Cookie</label><small>至少填写同一次登录的 gld:sess 和 gld:sess.sig；如果浏览器同时存在 koa:sess 和 koa:sess.sig，也可以一并填写。编辑旧账号时留空可保持已保存的 Cookie。</small></div>
       <div class="field"><label>gld:sess</label><input name="gldSess" type="password" autocomplete="off" placeholder="${item.id ? '留空表示保持不变' : '填写 gld:sess 的值'}" /></div>
@@ -254,6 +256,7 @@ function accountModal() {
         <option value="Asia/Hong_Kong" ${item.scheduleTimezone === 'Asia/Hong_Kong' ? 'selected' : ''}>Asia/Hong_Kong</option>
         <option value="UTC" ${item.scheduleTimezone === 'UTC' ? 'selected' : ''}>UTC</option>
       </select></div>
+      <div class="field full"><label class="check-label"><input name="autoExchangeEnabled" type="checkbox" ${item.autoExchangeEnabled ? 'checked' : ''} />自动兑换积分续期</label><small>官网显示剩余 1 天时，在签到后选择积分足够且可用的最长档位，只兑换一次。暂停每日定时签到也会暂停自动兑换；兑换结果通过已设置的 Webhook 通知。</small></div>
       </div></fieldset><details class="notification-settings full" ${item.webhookUrl ? 'open' : ''}><summary>03 · 通知与到期提醒 <span>可选</span></summary><div class="form-grid"><div class="field full"><small>填写 Webhook 后可接收签到结果；到期提醒还需要设置 Cookie 过期时间。</small></div><div class="field full"><label>Webhook URL（可选）</label><div class="inline-field"><input name="webhookUrl" type="url" value="${esc(item.webhookUrl)}" placeholder="https://example.com/hooks/glados" /><button type="button" class="btn btn-ghost" data-test-webhook>测试</button></div></div>
       <div class="field full"><label>Webhook Secret（可选）</label><input name="webhookSecret" type="password" placeholder="请求头 x-glados-signature；留空表示保持不变" /></div>
       <div class="field"><label class="check-label"><input name="cookieWarningEnabled" type="checkbox" ${item.cookieWarningEnabled === false ? '' : 'checked'} />Cookie 到期预警</label></div>
@@ -292,7 +295,7 @@ function bindActions() {
     button.textContent = '正在读取...'
     try {
       const data = await readBrowserCookie()
-      if (!data.cookieHeader) throw new Error('读取插件版本过旧，请下载并更新到 1.8.0 后重试')
+      if (!data.cookieHeader) throw new Error('读取插件版本过旧，请下载并更新到 1.9.0 后重试')
       if (data.cookieHeader) {
         let hidden = form.elements.cookieHeader
         if (!hidden) {
@@ -308,6 +311,17 @@ function bindActions() {
       form.elements.label.value = data.username || data.email || form.elements.label.value
       if (data.email) form.elements.email.value = data.email
       if (data.cookieExpiresAt) form.elements.cookieExpiresAt.value = toLocalInput(data.cookieExpiresAt)
+      if ('leftDays' in data || 'plan' in data) {
+        let profileInput = form.elements.importedProfile
+        if (!profileInput) {
+          profileInput = document.createElement('input')
+          profileInput.type = 'hidden'
+          profileInput.name = 'importedProfile'
+          form.append(profileInput)
+        }
+        profileInput.value = JSON.stringify({ leftDays: data.leftDays ?? null, plan: data.plan ?? null })
+        form.querySelector('[data-profile-preview]').textContent = `套餐：${data.plan || '待获取'} · ${data.daysLeft == null ? '剩余时长待获取' : `剩余 ${data.daysLeft} 天`}（已从官网读取）`
+      }
       const names = Array.isArray(data.cookieNames) ? data.cookieNames.join('、') : '完整 Cookie'
       formFeedback(`已读取 ${names}。点击“保存账号”完成导入。`)
     } catch (error) {
@@ -326,6 +340,9 @@ function bindActions() {
     submit.textContent = '正在保存…'
     const payload = Object.fromEntries(new FormData(form))
     payload.enabled = event.currentTarget.elements.enabled.checked
+    payload.autoExchangeEnabled = form.elements.autoExchangeEnabled.checked
+    if (payload.importedProfile) payload.profile = JSON.parse(payload.importedProfile)
+    delete payload.importedProfile
     payload.cookieWarningEnabled = event.currentTarget.elements.cookieWarningEnabled.checked
     payload.cookieWarningDays = Number(payload.cookieWarningDays)
     try {

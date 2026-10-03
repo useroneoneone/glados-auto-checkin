@@ -23,6 +23,8 @@ export function deliverWebhook({ url, secret = '', event = 'glados.checkin', acc
     `状态：${statusLabels[result?.status] || result?.status || '未知'}`,
     result?.message ? `消息：${result.message}` : '',
     result?.points != null ? `当前积分：${String(result.points).replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '')}` : '',
+    result?.plan ? `套餐：${result.plan}` : '',
+    result?.leftDays != null ? `剩余时长：${Math.round(Number(result.leftDays))} 天` : '',
     `时间：${new Date(checkedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}`,
   ].filter(Boolean).join('\n')
   let provider = 'generic'

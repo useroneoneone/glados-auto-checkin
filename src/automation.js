@@ -8,6 +8,8 @@ import { JobRegistry } from './jobs.js'
 import { deliverWebhook } from './webhook.js'
 import { safeErrorMessage } from './errors.js'
 import { createCookieWarningScanner } from './cookie-warnings.js'
+import { saveAccountProfile } from './profile.js'
+import { autoExchange } from './exchange.js'
 
 export const checkCookieWarnings = createCookieWarningScanner({ database: db })
 
@@ -35,6 +37,12 @@ async function executeCheckin(accountId) {
       client = new GladosClient(account)
       await client.open()
       result = await client.checkin()
+      if (['success', 'already_signed'].includes(result.status)) {
+        try { await autoExchange({ database: db, accountId, client, result }) } catch (error) {
+          result.exchange = { status: 'failed', message: safeErrorMessage(error) }
+          result.message += `；自动兑换处理失败：${result.exchange.message}`
+        }
+      }
     }
   } catch (error) {
     result = { status: 'failed', message: safeErrorMessage(error) }
@@ -46,6 +54,7 @@ async function executeCheckin(accountId) {
   result.checkedAt = now
   const checkinId = db.transaction(() => {
     if (!db.prepare('SELECT id FROM accounts WHERE id = ?').get(accountId)) return null
+    saveAccountProfile(db, accountId, result)
     db.prepare('UPDATE accounts SET last_status = ?, last_message = ?, last_checked_at = ?, updated_at = ? WHERE id = ?')
       .run(result.status, result.message || '', now, now, accountId)
     return db.prepare('INSERT INTO checkins (account_id, status, message, points, points_change, left_days, raw_json, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
@@ -86,6 +95,7 @@ async function executeLogin(accountId) {
     const current = await client.status()
     if (!current.loggedIn) throw new Error(current.message || 'Cookie 未登录或已失效，请重新读取 Cookie')
     const now = new Date().toISOString()
+    saveAccountProfile(db, accountId, current.profile)
     db.prepare('UPDATE accounts SET last_status = ?, last_message = ?, last_checked_at = ?, updated_at = ? WHERE id = ?')
       .run('logged_in', 'Cookie 登录态有效', now, now, accountId)
     return { status: 'logged_in', message: 'Cookie 登录态有效' }

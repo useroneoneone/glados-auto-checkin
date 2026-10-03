@@ -2,6 +2,7 @@ import { config } from './config.js'
 import { decrypt } from './crypto.js'
 import { httpError, withRetry } from './retry.js'
 import { safeErrorMessage } from './errors.js'
+import { userProfile } from './profile.js'
 
 const CHECKIN_URL = `${config.gladosOrigin}/console/checkin`
 const COOKIE_ATTRIBUTE_NAMES = new Set(['path', 'domain', 'expires', 'max-age', 'secure', 'httponly', 'samesite', 'priority'])
@@ -108,7 +109,32 @@ export class GladosClient {
     const data = json?.data || json
     const loggedIn = (json?.code == null || Number(json.code) === 0)
       && Boolean(data?.email || data?.isLogin === true || data?.loggedIn === true || data?.user || data?.username)
-    return { loggedIn, data, message: loggedIn ? '' : '登录态无效，请用新版插件重新读取 Cookie（至少包含 gld:sess、gld:sess.sig）' }
+    return { loggedIn, data, profile: loggedIn ? userProfile(data) : null, message: loggedIn ? '' : '登录态无效，请用新版插件重新读取 Cookie（至少包含 gld:sess、gld:sess.sig）' }
+  }
+
+  async points() {
+    const response = await this.requestJson('/api/user/points')
+    if (!response.ok) throw httpError('积分查询', response.status)
+    const payload = response.payload
+    if (payload?.code != null && Number(payload.code) !== 0) throw new Error('积分查询未通过，请检查登录状态')
+    const data = payload?.data || payload || {}
+    if (data.points == null || String(data.points).trim() === '' || !Number.isFinite(Number(data.points))) throw new Error('积分接口缺少有效余额')
+    return { ...data, points: formatDecimal(data.points) }
+  }
+
+  async exchangeSnapshot({ allowPartial = false } = {}) {
+    const reads = await Promise.allSettled([this.status(), this.points()])
+    const current = reads[0].status === 'fulfilled' && reads[0].value.loggedIn ? reads[0].value : null
+    const points = reads[1].status === 'fulfilled' ? reads[1].value : null
+    const errors = []
+    if (!current) errors.push(reads[0].status === 'rejected' ? safeErrorMessage(reads[0].reason) : '登录状态已失效')
+    if (!points) errors.push(safeErrorMessage(reads[1].reason))
+    if (errors.length && (!allowPartial || (!current && !points))) throw new Error(errors.join('；'))
+    return { ...current?.profile, ...points, readErrors: errors }
+  }
+
+  async exchange(planType) {
+    return this.requestJson('/api/user/exchange', { method: 'POST', data: { planType } })
   }
 
   async checkin() {
@@ -151,7 +177,8 @@ export class GladosClient {
       message: `${message || JSON.stringify(payload)}${pointsWarning}`,
       points: formatDecimal(latest?.balance ?? points.points),
       pointsChange: formatDecimal(change),
-      leftDays: status.data?.leftDays == null ? null : String(status.data.leftDays).split('.')[0],
+      leftDays: status.profile?.leftDays ?? null,
+      plan: status.profile?.plan ?? null,
       raw: payload,
     }
   }

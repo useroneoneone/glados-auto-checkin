@@ -86,6 +86,8 @@ test('authenticated HTTP jobs deduplicate and webhook tests return 202', { timeo
       assert.equal(response.status, 201)
       assert.equal(data.account.cookieWarningDays, 3)
       assert.equal(data.account.cookieWarningEnabled, true)
+      assert.equal(data.account.autoExchangeEnabled, false)
+      assert.equal(data.account.daysLeft, null)
       ids.push(data.account.id)
     }
     const browserAccount = await api('/api/accounts', {
@@ -109,6 +111,18 @@ test('authenticated HTTP jobs deduplicate and webhook tests return 202', { timeo
     })
     assert.equal(twoCookieAccount.response.status, 201)
     assert.equal(twoCookieAccount.data.account.hasFullCookie, true)
+    const imported = await api(`/api/accounts/${twoCookieAccount.data.account.id}`, {
+      method: 'PUT', body: { autoExchangeEnabled: true, profile: { leftDays: '1.49', plan: 'Pro' } },
+    })
+    assert.equal(imported.data.account.autoExchangeEnabled, true)
+    assert.equal(imported.data.account.daysLeft, 1)
+    assert.equal(imported.data.account.plan, 'Pro')
+    const retained = await api(`/api/accounts/${twoCookieAccount.data.account.id}`, { method: 'PUT', body: { label: 'Retained' } })
+    assert.equal(retained.data.account.autoExchangeEnabled, true)
+    assert.equal(retained.data.account.plan, 'Pro')
+    for (const body of [{ autoExchangeEnabled: 'false' }, { profile: { leftDays: 'invalid' } }, { profile: { plan: '<script>' } }]) {
+      assert.equal((await api(`/api/accounts/${ids[0]}`, { method: 'PUT', body })).response.status, 400)
+    }
     const partialCookieAccount = await api('/api/accounts', {
       method: 'POST', body: { label: 'Partial four Cookie fixture', koaSess: 'koa-session', enabled: false },
     })

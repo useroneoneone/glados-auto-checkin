@@ -123,11 +123,19 @@ function decodeSession(value) {
 }
 
 function userFromStatus(payload) {
+  if (payload?.code != null && Number(payload.code) !== 0) return null
   const data = payload?.data || payload || {}
   const user = data.user || {}
   const email = data.email || user.email || ''
   const username = data.username || data.name || user.username || user.name || email || ''
-  return { username: String(username || ''), email: String(email || '') }
+  const days = data.leftDays == null || String(data.leftDays).trim() === '' ? NaN : Number(data.leftDays)
+  const vip = data.vip == null || String(data.vip).trim() === '' ? NaN : Number(data.vip)
+  const plans = { 0: 'Free', 10: 'Free', 11: 'Edu', 21: 'Basic', 31: 'Pro', 41: 'Team', 51: 'Enterprise' }
+  return { username: String(username || ''), email: String(email || ''),
+    leftDays: Number.isFinite(days) ? String(days) : null,
+    daysLeft: Number.isFinite(days) ? Math.round(days) : null,
+    plan: Number.isFinite(vip) ? (plans[vip] || 'Basic') : null,
+  }
 }
 
 async function statusFromExtensionRequest() {
@@ -214,6 +222,9 @@ async function readGladosSession() {
     cookieNames: cookieParts.map((part) => part.slice(0, part.indexOf('='))),
     username: status.username || status.email || fallbackName,
     email: status.email || '',
+    leftDays: status.leftDays ?? null,
+    daysLeft: status.daysLeft ?? null,
+    plan: status.plan ?? null,
     cookieExpiresAt: Number.isFinite(expiryMs) && expiryMs > 0 ? new Date(expiryMs).toISOString() : '',
   }
 }

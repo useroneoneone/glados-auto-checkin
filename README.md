@@ -5,6 +5,8 @@ glados登录地址：https://glados-facility.com/login
 
 本项目使用 Cookie 管理多个 GLaDOS 账号，支持定时签到、独立 Webhook、Cookie 到期预警和浏览器插件导入。
 
+<img width="1538" height="684" alt="image" src="https://github.com/user-attachments/assets/3a3934e0-83ab-44b6-b72d-dac096b205c6" />
+
 - 手动签到、定时签到和登录检测统一排队，只使用 Node 原生 HTTP 客户端，不启动浏览器。
 - GET 临时网络错误有限重试，结果不明的签到提交不会自动重放。
 - 每个账号独立配置随机入队时间段、时区、Webhook 和到期预警。

@@ -130,14 +130,21 @@ function renderLogin(error = '') {
     const form = event.currentTarget
     const submit = form.querySelector('[type="submit"]')
     if (submit.disabled) return
+    form.querySelector('.acl-error')?.remove()
     submit.disabled = true
-    submit.textContent = '正在登录…'
+    submit.textContent = '登录中...'
     try {
       const credentials = Object.fromEntries(new FormData(form))
       await api('/api/auth/login', { method: 'POST', body: JSON.stringify(credentials) })
       await boot()
     } catch (e) {
-      renderLogin(e.message)
+      const notice = document.createElement('p')
+      notice.className = 'acl-error'
+      notice.setAttribute('role', 'alert')
+      notice.textContent = e.message
+      submit.before(notice)
+      submit.disabled = false
+      submit.textContent = '登 录'
     }
   })
 }

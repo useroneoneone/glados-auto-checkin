@@ -14,6 +14,14 @@ glados登录地址：https://glados-facility.com/login
 
 ## 三步部署
 
+### v1.1.0 预构建安装包
+
+新登录页已按 [可复用 React 组件](https://github.com/useroneoneone/animated-characters-login-ui) 校对身体倾斜、单眼跟随、密码显隐和表单布局，详见 [校对记录](docs/login-ui-parity.md)。
+
+轻量云服务器也可以直接下载 [GitHub Release 部署包](https://github.com/useroneoneone/glados-auto-checkin/releases/latest)，校验 `SHA256SUMS` 后执行 `bash install.sh ~/glados-auto-checkin`。部署包使用固定提交的预构建镜像，首次安装自动生成随机密钥；已有配置和数据会保留。完整命令见 [中文安装说明](docs/INSTALL.zh-CN.md)。
+
+已有使用 `latest` 镜像的部署可直接执行 `docker compose pull` 和 `docker compose up -d`，无需重新安装。
+
 适用于已安装 **Docker 和 Docker Compose 的 Linux x86_64 / amd64 服务器**。在服务器终端执行以下命令，无需安装 Node.js 或下载项目源码。
 
 先运行以下两条命令，确认都能显示版本。如果提示命令不存在，请先参考 [Docker 官方安装说明](https://docs.docker.com/engine/install/) 安装 Docker 和 Compose 插件。
@@ -192,6 +200,8 @@ docker compose up -d
 - `latest`：最近一次通过验证的 `main` 构建。
 - `sha-<12位提交号>`：固定版本，便于回滚。
 - `v*` Git 标签：发布同名镜像标签，不改变 `latest`。
+
+版本标签通过测试并发布镜像后，会自动创建 GitHub Release，附带固定镜像版本的部署压缩包与 SHA-256 校验文件。发布包仅包含启动配置、安装脚本、版本元数据和中文说明，不包含运行数据库或真实 `.env`。
 
 Pull Request 只构建和测试，不推送镜像。也可以在 GitHub 的 **Actions → Build and publish Docker image → Run workflow** 手动构建。镜像发布不会自动重启你的服务器，更新时仍需执行 `pull` 和 `up -d`。
 

@@ -10,14 +10,14 @@
   --acl-ink: #2d2d2d;
   --acl-salmon: #ff9b6b;
   --acl-yellow: #e8d754;
-  --acl-primary: #245edb;
+  --acl-primary: #3b82f6;
   --acl-page: #0f172a;
   --acl-surface: #0f172a;
   --acl-text: #f8fafc;
-  --acl-muted: #b5c0cf;
-  --acl-border: #48566b;
+  --acl-muted: #94a3b8;
+  --acl-border: #273449;
   --acl-input: #111c2e;
-  --acl-focus: #7db1ff;
+  --acl-focus: #60a5fa;
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
@@ -25,7 +25,45 @@
   overflow: hidden;
   background: var(--acl-page);
   color: var(--acl-text);
-  font-family: var(--sans, system-ui, sans-serif);
+  line-height: 1.5;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.acl-login--light {
+  --acl-page: #f8fafc;
+  --acl-surface: #ffffff;
+  --acl-text: #0f172a;
+  --acl-muted: #64748b;
+  --acl-border: #d8e0ec;
+  --acl-input: #ffffff;
+  --acl-focus: #2563eb;
+}
+
+.acl-theme-toggle {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 10;
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border: 0;
+  border-radius: .5rem;
+  color: var(--acl-text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.acl-theme-toggle:hover {
+  background: color-mix(in srgb, var(--acl-text) 9%, transparent);
+}
+
+.acl-theme-toggle svg,
+.acl-brand-mark svg,
+.acl-password-toggle svg {
+  width: 1.15rem;
+  height: 1.15rem;
 }
 
 .acl-visual-panel,
@@ -38,10 +76,9 @@
 .acl-visual-panel {
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: space-between;
   overflow: hidden;
-  padding: clamp(1.25rem, 4vw, 3rem);
+  padding: 3rem;
   color: #fff;
   background: var(--acl-panel);
 }
@@ -49,50 +86,27 @@
 .acl-brand {
   display: flex;
   align-items: center;
-  gap: .8rem;
+  gap: .5rem;
   font-size: 1.125rem;
   font-weight: 650;
   letter-spacing: -.01em;
 }
 
-.acl-brand--desktop {
-  align-self: flex-start;
-}
-
 .acl-brand-mark {
-  display: block;
-  width: 3rem;
-  height: 3rem;
-  flex: none;
-  object-fit: contain;
-}
-
-.acl-brand-copy {
   display: grid;
-  gap: .12rem;
-}
-
-.acl-brand-copy strong {
-  color: #f8fafc;
-  font-size: 1.05rem;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
-.acl-brand-copy > span {
-  color: #bdc7d5;
-  font-size: .74rem;
-  font-weight: 500;
-  letter-spacing: .04em;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: .5rem;
+  background: rgba(255, 255, 255, .1);
+  backdrop-filter: blur(8px);
 }
 
 .acl-character-stage {
   display: flex;
-  width: 100%;
-  min-height: 31.25rem;
+  height: 31.25rem;
   align-items: end;
   justify-content: center;
-  overflow: hidden;
 }
 
 .acl-character-canvas {
@@ -147,28 +161,7 @@
 
 .acl-face {
   position: absolute;
-  transform: translate3d(var(--look-x, 0px), var(--look-y, 0px), 0);
-  transition: left .2s ease-out, top .2s ease-out, transform .2s ease-out;
-}
-
-.acl-face--purple {
-  left: 2.8125rem;
-  top: 2.5rem;
-}
-
-.acl-face--black {
-  left: 1.625rem;
-  top: 2rem;
-}
-
-.acl-face--orange {
-  left: 5.125rem;
-  top: 5.625rem;
-}
-
-.acl-face--yellow {
-  left: 3.25rem;
-  top: 2.5rem;
+  transition: left .2s ease-out, top .2s ease-out;
 }
 
 .acl-eyes {
@@ -197,10 +190,10 @@
   display: block;
   width: var(--pupil-size);
   height: var(--pupil-size);
+  transform: translate(var(--pupil-x, 0px), var(--pupil-y, 0px));
   flex: none;
   border-radius: 999px;
   background: var(--acl-ink);
-  transform: translate(var(--pupil-x, 0px), var(--pupil-y, 0px));
   transition: transform .1s ease-out;
 }
 
@@ -212,8 +205,6 @@
 
 .acl-mouth {
   position: absolute;
-  left: 2.5rem;
-  top: 5.5rem;
   display: block;
   width: 5rem;
   height: .25rem;
@@ -222,12 +213,21 @@
   transition: left .2s ease-out, top .2s ease-out;
 }
 
-.acl-character.is-blinking .acl-eye {
-  height: 2px;
+.acl-footer-links {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  font-size: .875rem;
 }
 
-.acl-character.is-blinking .acl-pupil {
-  opacity: 0;
+.acl-footer-links a {
+  color: rgba(255, 255, 255, .6);
+  text-decoration: none;
+  transition: color .2s ease;
+}
+
+.acl-footer-links a:hover {
+  color: #fff;
 }
 
 .acl-form-panel {
@@ -247,44 +247,50 @@
   margin-bottom: 3rem;
 }
 
+.acl-login--light .acl-brand--mobile .acl-brand-mark {
+  color: var(--acl-primary);
+  background: color-mix(in srgb, var(--acl-primary) 10%, transparent);
+}
+
 .acl-form-heading {
   margin-bottom: 2.5rem;
+  text-align: center;
 }
 
 .acl-form-heading h1 {
-  margin: 0 0 .55rem;
-  font-size: 2rem;
+  margin: 0 0 .5rem;
+  font-size: 1.875rem;
   line-height: 1.2;
-  letter-spacing: -.04em;
+  letter-spacing: -.03em;
 }
 
 .acl-form-heading p,
 .acl-helper-text {
   margin: 0;
   color: var(--acl-muted);
-  font-size: .9rem;
+  font-size: .875rem;
   line-height: 1.6;
 }
 
 .acl-form {
   display: grid;
-  gap: 1.35rem;
+  gap: 1.25rem;
 }
 
 .acl-field {
   display: grid;
-  gap: .55rem;
+  gap: .5rem;
   color: var(--acl-text);
   font-size: .875rem;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .acl-field input {
   width: 100%;
-  height: 3.25rem;
-  padding: 0 .9rem;
+  height: 3rem;
+  padding: 0 .75rem;
   border: 1px solid var(--acl-border);
-  border-radius: .5rem;
+  border-radius: .375rem;
   outline: none;
   color: var(--acl-text);
   background: var(--acl-input);
@@ -295,12 +301,11 @@
 
 .acl-field input::placeholder {
   color: var(--acl-muted);
-  opacity: .82;
 }
 
 .acl-field input:focus {
   border-color: var(--acl-focus);
-  box-shadow: 0 0 0 3px rgb(125 177 255 / 22%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--acl-focus) 20%, transparent);
 }
 
 .acl-password-wrap {
@@ -309,178 +314,100 @@
 }
 
 .acl-password-wrap input {
-  padding-right: 4.2rem;
+  padding-right: 3rem;
 }
 
 .acl-password-toggle {
   position: absolute;
   top: 50%;
-  right: .8rem;
-  padding: .35rem .2rem;
   transform: translateY(-50%);
+  right: .75rem;
+  display: grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  place-items: center;
   border: 0;
-  color: #c4d0df;
+  color: var(--acl-muted);
   background: transparent;
-  font-size: .8rem;
-  font-weight: 600;
   cursor: pointer;
 }
 
 .acl-password-toggle:hover {
-  color: #fff;
+  color: var(--acl-text);
 }
 
 .acl-error {
-  margin: -.15rem 0 0;
-  padding: .8rem .9rem;
-  border: 1px solid rgb(248 113 113 / 42%);
+  margin: 0;
+  padding: .75rem;
+  border: 1px solid rgba(239, 68, 68, .35);
   border-radius: .5rem;
-  color: #fecaca;
-  background: rgb(239 68 68 / 12%);
+  color: #f87171;
+  background: rgba(239, 68, 68, .1);
   font-size: .875rem;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
 .acl-submit {
   width: 100%;
-  height: 3.25rem;
+  height: 3rem;
   border: 0;
-  border-radius: .5rem;
-  color: #fff;
+  border-radius: .375rem;
+  color: #eff6ff;
   background: var(--acl-primary);
   font: inherit;
-  font-size: .96rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
   transition: background .2s ease, transform .2s ease;
 }
 
 .acl-submit:hover:not(:disabled) {
-  background: #1e40af;
+  background: #2563eb;
   transform: translateY(-1px);
 }
 
 .acl-submit:focus-visible,
-.acl-password-toggle:focus-visible {
+.acl-theme-toggle:focus-visible,
+.acl-password-toggle:focus-visible,
+.acl-footer-links a:focus-visible {
   outline: 2px solid var(--acl-focus);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 
 .acl-submit:disabled {
   cursor: wait;
-  opacity: .7;
+  opacity: .6;
 }
 
 .acl-helper-text {
-  margin-top: 1.5rem;
+  margin-top: 2rem;
   text-align: center;
-  font-size: .82rem;
 }
 
-.acl-login.is-typing .acl-character--purple,
-.acl-login.has-password:not(.is-password-visible) .acl-character--purple {
-  height: 27.5rem;
-  transform: skewX(-10deg) translateX(2.5rem);
-}
-
-.acl-login.is-typing .acl-character--black,
-.acl-login.has-password:not(.is-password-visible) .acl-character--black {
-  transform: skewX(7deg) translateX(.75rem);
-}
-
-.acl-login.is-typing .acl-character--yellow {
-  transform: skewX(-3deg);
-}
-
-.acl-login.is-looking-at-each-other .acl-face--purple {
-  left: 3.4375rem;
-  top: 4.0625rem;
-}
-
-.acl-login.is-looking-at-each-other .acl-face--black {
-  left: 2rem;
-  top: .75rem;
-}
-
-.acl-login.is-looking-at-each-other .acl-face--orange {
-  left: 5.125rem;
-  top: 5.625rem;
-}
-
-.acl-login.is-looking-at-each-other .acl-face--yellow {
-  left: 3.25rem;
-  top: 2.5rem;
-}
-
-.acl-login.is-password-visible .acl-character {
-  transform: none;
-}
-
-.acl-login.is-password-visible .acl-face--purple {
-  left: 1.25rem;
-  top: 2.1875rem;
-}
-
-.acl-login.is-password-visible .acl-face--black {
-  left: .625rem;
-  top: 1.75rem;
-}
-
-.acl-login.is-password-visible .acl-face--orange {
-  left: 3.125rem;
-  top: 5.3125rem;
-}
-
-.acl-login.is-password-visible .acl-face--yellow {
-  left: 1.25rem;
-  top: 2.1875rem;
-}
-
-.acl-login.is-password-visible .acl-mouth {
-  left: .625rem;
-  top: 5.5rem;
-}
-
-.acl-login.is-peeking .acl-face--purple {
-  left: 3.4375rem;
-  top: 4.0625rem;
-}
+.acl-face--purple { left: 45px; top: 40px; }
+.acl-face--black { left: 26px; top: 32px; }
+.acl-face--orange { left: 82px; top: 90px; }
+.acl-face--yellow { left: 52px; top: 40px; }
+.acl-mouth { left: 40px; top: 88px; }
+.acl-character.is-blinking .acl-eye { height: 2px; }
+.acl-character.is-blinking .acl-pupil { opacity: 0; }
 
 @media (min-width: 961px) and (max-width: 1100px) {
-  .acl-character-canvas {
-    transform: scale(.68);
-    transform-origin: bottom center;
-  }
+  .acl-character-canvas { transform: scale(.68); transform-origin: bottom center; }
 }
 
 @media (min-width: 1101px) and (max-width: 1240px) {
-  .acl-character-canvas {
-    transform: scale(.82);
-    transform-origin: bottom center;
-  }
-}
-
-@media (min-width: 1241px) and (max-width: 1360px) {
-  .acl-character-canvas {
-    transform: scale(.94);
-    transform-origin: bottom center;
-  }
+  .acl-character-canvas { transform: scale(.82); transform-origin: bottom center; }
 }
 
 @media (max-width: 960px) {
-  .acl-login {
-    overflow-x: hidden;
-    overflow-y: auto;
-  }
-
   .acl-visual-panel {
     display: none;
   }
 
   .acl-form-panel {
     width: 100%;
-    min-height: 100vh;
-    min-height: 100dvh;
   }
 
   .acl-brand--mobile {

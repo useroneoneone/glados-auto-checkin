@@ -2,6 +2,9 @@
 node_modules/
 .npm-cache/
 .local-*
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
 *.tar.gz
 *.zip
 !public/downloads/glados-cookie-helper-v1.1.0.zip

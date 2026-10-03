@@ -1,5 +1,8 @@
+import { createAnimatedLoginMarkup, mountAnimatedLogin } from './animated-login.js'
+
 const app = document.querySelector('#app')
 let state = { user: null, accounts: [], checkins: [], view: 'overview', modal: false, editing: null, jobs: {} }
+let loginCleanup = null
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]))
 const fmt = (value) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—'
@@ -119,12 +122,19 @@ async function runJob(url, accountId, label) {
   }
 }
 function renderLogin(error = '') {
-  app.innerHTML = `<main class="login-screen"><section class="login-card"><div class="brand"><div class="brand-mark">G</div><span>GLaDOS Console</span></div><h1>自动签到控制台</h1><p>管理多个 GLaDOS 账号的定时签到与结果通知。</p>${error ? `<div class="notice">${esc(error)}</div>` : ''}<form id="login-form"><div class="field"><label for="login-user">管理员账号</label><input id="login-user" name="username" autocomplete="username" required /></div><div class="field"><label for="login-password">管理员密码</label><input id="login-password" name="password" type="password" autocomplete="current-password" required /></div><button class="btn btn-primary" style="width:100%">登录后台</button></form></section></main>`
+  loginCleanup?.()
+  app.innerHTML = createAnimatedLoginMarkup(error)
+  loginCleanup = mountAnimatedLogin(app.querySelector('.acl-login'))
   document.querySelector('#login-form').addEventListener('submit', async (event) => {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
+    const form = event.currentTarget
+    const submit = form.querySelector('[type="submit"]')
+    if (submit.disabled) return
+    submit.disabled = true
+    submit.textContent = '正在登录…'
     try {
-      await api('/api/auth/login', { method: 'POST', body: JSON.stringify(Object.fromEntries(form)) })
+      const credentials = Object.fromEntries(new FormData(form))
+      await api('/api/auth/login', { method: 'POST', body: JSON.stringify(credentials) })
       await boot()
     } catch (e) {
       renderLogin(e.message)
@@ -137,6 +147,8 @@ async function loadData() {
   state.checkins = checkins.checkins
 }
 function renderShell() {
+  loginCleanup?.()
+  loginCleanup = null
   const focusKey = document.activeElement?.dataset
   const success = state.checkins.filter((item) => item.status === 'success' || item.status === 'already_signed').length
   const active = state.accounts.filter((item) => item.enabled).length

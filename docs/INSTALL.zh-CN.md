@@ -11,15 +11,15 @@
 ```bash
 mkdir -p ~/glados-download
 cd ~/glados-download
-curl -fLO https://github.com/useroneoneone/glados-auto-checkin/releases/latest/download/glados-auto-checkin-v1.2.0-deploy.tar.gz
+curl -fLO https://github.com/useroneoneone/glados-auto-checkin/releases/latest/download/glados-auto-checkin-v1.2.1-deploy.tar.gz
 curl -fLO https://github.com/useroneoneone/glados-auto-checkin/releases/latest/download/SHA256SUMS
 sha256sum -c SHA256SUMS
-tar -xzf glados-auto-checkin-v1.2.0-deploy.tar.gz
-cd glados-auto-checkin-v1.2.0-deploy
+tar -xzf glados-auto-checkin-v1.2.1-deploy.tar.gz
+cd glados-auto-checkin-v1.2.1-deploy
 bash install.sh ~/glados-auto-checkin
 ```
 
-`latest` 示例文件名对应 v1.2.0；以后从 Release 页使用目标版本的确切链接与文件名。安装脚本会隐藏密码输入，要求设置至少 12 位管理员密码，自动生成两份独立随机密钥，再拉取已测试的镜像并启动。默认管理员账号 `admin`、对外端口 `3000`。
+`latest` 示例文件名对应 v1.2.1；以后从 Release 页使用目标版本的确切链接与文件名。安装脚本会隐藏密码输入，要求设置至少 12 位管理员密码，自动生成两份独立随机密钥，再拉取已测试的镜像并启动。默认管理员账号 `admin`、对外端口 `3000`。
 
 如需其他端口，可执行 `GLADOS_HOST_PORT=3080 bash install.sh ~/glados-auto-checkin`。密码字符允许字母、数字和 `. _ @ % + = : -`；高级字符可由用户手动编辑 `.env` 配置。脚本不会打印密码或密钥。
 

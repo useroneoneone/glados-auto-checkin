@@ -127,7 +127,7 @@ export function accountPublic(row) {
     label: row.label,
     leftDays: row.left_days ?? null,
     daysLeft: userProfile({ leftDays: row.left_days }).daysLeft,
-    plan: row.plan ?? null,
+    plan: ['Free', 'Basic', 'Pro', 'Team'].includes(row.plan) ? row.plan : null,
     profileUpdatedAt: row.profile_updated_at ?? null,
     autoExchangeEnabled: Boolean(row.auto_exchange_enabled),
     currentPoints: balance?.points ?? null,

@@ -2,6 +2,8 @@
 
 用户已确认：账号名称 / Plan / 状态为第一行，邮箱 / 剩余天数为第二行；独立兑换开关默认关闭。仅成功或已签到后检查，官网显示 1 天时选择可用且积分足够的最长档位，执行一次。停用每日定时也停用兑换，包括手动签到后的兑换。成功刷新属性和积分并用现有 Webhook 通知。
 
+用户最终确认显示四种套餐：Free、Basic、Pro、Team。插件、导入校验和账号卡片统一采用这些类型。
+
 官网核实（2026-10-03）：`GET /api/user/status` 的 `leftDays` 在积分页使用 `Math.round`；VIP 0/10/11/21/31/41/51 显示 Free/Free/Edu/Basic/Pro/Team/Enterprise。`GET /api/user/points` 返回余额、history、plans；`POST /api/user/exchange` 发送 `{ planType }`。积分流水 business 为 `system:ex:planType:YYYY-MM-DD`。
 
 实现步骤：

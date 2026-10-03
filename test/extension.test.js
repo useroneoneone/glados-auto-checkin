@@ -30,7 +30,7 @@ function readSession(cookies, { directRead = true, status = { email: 'fixture@ex
 const cookie = (value, expirationDate) => ({ value, expirationDate })
 
 test('extension imports Plan and official rounded Days Left without changing the name', async () => {
-  for (const [vip, plan] of [[0, 'Free'], [10, 'Free'], [11, 'Edu'], [21, 'Basic'], [31, 'Pro'], [41, 'Team'], [51, 'Enterprise']]) {
+  for (const [vip, plan] of [[0, 'Free'], [10, 'Free'], [21, 'Basic'], [31, 'Pro'], [41, 'Team']]) {
     const result = await readSession({ 'gld:sess': cookie('new'), 'gld:sess.sig': cookie('sig') },
       { status: { code: 0, data: { username: 'Fixture', leftDays: '1.490000000', vip } } })
     assert.equal(result.username, 'Fixture')

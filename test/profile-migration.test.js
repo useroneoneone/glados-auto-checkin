@@ -26,4 +26,5 @@ test('existing accounts migrate with redemption disabled and their original valu
 test('profile uses official rounding and does not invent a plan for missing metadata', () => {
   assert.deepEqual(userProfile({ leftDays: '23.500000', vip: 31 }), { leftDays: '23.5', daysLeft: 24, plan: 'Pro' })
   assert.deepEqual(userProfile({ leftDays: '', vip: '' }), { leftDays: null, daysLeft: null, plan: null })
+  assert.equal(userProfile({ leftDays: '1', vip: 999 }).plan, null)
 })

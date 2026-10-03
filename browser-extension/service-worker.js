@@ -130,11 +130,11 @@ function userFromStatus(payload) {
   const username = data.username || data.name || user.username || user.name || email || ''
   const days = data.leftDays == null || String(data.leftDays).trim() === '' ? NaN : Number(data.leftDays)
   const vip = data.vip == null || String(data.vip).trim() === '' ? NaN : Number(data.vip)
-  const plans = { 0: 'Free', 10: 'Free', 11: 'Edu', 21: 'Basic', 31: 'Pro', 41: 'Team', 51: 'Enterprise' }
+  const plans = { 0: 'Free', 10: 'Free', 21: 'Basic', 31: 'Pro', 41: 'Team' }
   return { username: String(username || ''), email: String(email || ''),
     leftDays: Number.isFinite(days) ? String(days) : null,
     daysLeft: Number.isFinite(days) ? Math.round(days) : null,
-    plan: Number.isFinite(vip) ? (plans[vip] || 'Basic') : null,
+    plan: Number.isFinite(vip) ? (plans[vip] || null) : null,
   }
 }
 

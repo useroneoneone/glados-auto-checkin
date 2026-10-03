@@ -120,7 +120,7 @@ test('authenticated HTTP jobs deduplicate and webhook tests return 202', { timeo
     const retained = await api(`/api/accounts/${twoCookieAccount.data.account.id}`, { method: 'PUT', body: { label: 'Retained' } })
     assert.equal(retained.data.account.autoExchangeEnabled, true)
     assert.equal(retained.data.account.plan, 'Pro')
-    for (const body of [{ autoExchangeEnabled: 'false' }, { profile: { leftDays: 'invalid' } }, { profile: { plan: '<script>' } }]) {
+    for (const body of [{ autoExchangeEnabled: 'false' }, { profile: { leftDays: 'invalid' } }, { profile: { plan: '<script>' } }, { profile: { plan: 'Edu' } }]) {
       assert.equal((await api(`/api/accounts/${ids[0]}`, { method: 'PUT', body })).response.status, 400)
     }
     const partialCookieAccount = await api('/api/accounts', {

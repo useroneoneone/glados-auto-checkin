@@ -101,7 +101,7 @@ const importedProfile = (value) => {
   const days = value.leftDays
   if (days != null && (!['number', 'string'].includes(typeof days) || String(days).trim() === '' || !Number.isFinite(Number(days)) || Math.abs(Number(days)) > 100000)) throw new Error('剩余时长格式无效')
   const plan = value.plan
-  if (plan != null && !['Free', 'Edu', 'Basic', 'Pro', 'Team', 'Enterprise'].includes(plan)) throw new Error('套餐类型格式无效')
+  if (plan != null && !['Free', 'Basic', 'Pro', 'Team'].includes(plan)) throw new Error('套餐类型格式无效')
   return { leftDays: days == null ? null : String(Number(days)), plan: plan ?? null }
 }
 

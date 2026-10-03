@@ -8,7 +8,7 @@ glados登录地址：https://glados-facility.com/login
 - 手动签到、定时签到和登录检测统一排队，只使用 Node 原生 HTTP 客户端，不启动浏览器。
 - GET 临时网络错误有限重试，结果不明的签到提交不会自动重放。
 - 每个账号独立配置随机入队时间段、时区、Webhook 和到期预警。
-- 账号卡片展示官网 Plan 和 Days Left；插件 1.9.0 导入时同步这两个属性，登录检测和签到也会更新。
+- 账号卡片展示官网 Plan（Free、Basic、Pro、Team）和 Days Left；插件 1.9.1 导入时同步这两个属性，登录检测和签到也会更新。
 - 每个账号可独立开启自动兑换（默认关闭）：签到后官网显示剩余 1 天时，兑换积分足够且可用的最长档位一次；随每日定时签到暂停。
 - 浏览器插件从登录中的 Chrome/Edge 导入完整 Cookie；服务端只保存加密后的会话数据。
 - 后台有账号密码鉴权，Cookie 和 Webhook Secret 加密保存，数据存放在 `data/`。
@@ -16,7 +16,7 @@ glados登录地址：https://glados-facility.com/login
 
 ## 三步部署
 
-### v1.2.0 预构建安装包
+### v1.2.1 预构建安装包
 
 新登录页已按 [可复用 React 组件](https://github.com/useroneoneone/animated-characters-login-ui) 校对身体倾斜、单眼跟随、密码显隐和表单布局，详见 [校对记录](docs/login-ui-parity.md)。
 
@@ -152,7 +152,7 @@ docker compose up -d
 
 ### 浏览器插件导入
 
-1. 在账号窗口点击“下载插件”，下载 1.9.0 并解压 ZIP。
+1. 在账号窗口点击“下载插件”，下载 1.9.1 并解压 ZIP。
 2. 打开 `chrome://extensions/` 或 `edge://extensions/`，开启开发者模式，加载解压后的文件夹。
 3. 在同一浏览器中登录 GLaDOS，再打开本项目部署后的签到管理后台页面。
 4. 点击插件图标，选择“永久授权当前网站”，随后回到后台页面点击“读取浏览器 Cookie”。以后刷新后台或重启浏览器都会自动连接。

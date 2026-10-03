@@ -3,11 +3,11 @@ export function userProfile(data = {}) {
   const raw = data.leftDays
   const days = raw == null || String(raw).trim() === '' ? NaN : Number(raw)
   const vip = data.vip == null || String(data.vip).trim() === '' ? NaN : Number(data.vip)
-  const plans = { 0: 'Free', 10: 'Free', 11: 'Edu', 21: 'Basic', 31: 'Pro', 41: 'Team', 51: 'Enterprise' }
+  const plans = { 0: 'Free', 10: 'Free', 21: 'Basic', 31: 'Pro', 41: 'Team' }
   return {
     leftDays: Number.isFinite(days) ? String(days) : null,
     daysLeft: Number.isFinite(days) ? Math.round(days) : null,
-    plan: Number.isFinite(vip) ? (plans[vip] || 'Basic') : null,
+    plan: Number.isFinite(vip) ? (plans[vip] || null) : null,
   }
 }
 
